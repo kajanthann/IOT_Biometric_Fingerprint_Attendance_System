@@ -58,7 +58,7 @@ const ModuleDetails = () => {
       )}
 
       {/* Attendance Section */}
-      <div className="bg-white rounded-xl shadow-md p-6">
+      <div className="bg-white rounded-xl shadow-md mb-10 p-6">
         <Attendance day={day} timeSlots={timeSlots} />
       </div>
     </div>

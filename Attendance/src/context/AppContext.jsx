@@ -15,7 +15,7 @@ const AppContextProvider = ({ children }) => {
   const csvUrl =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vQw3N9IWLeLtfrevd9rwZzzJHJYw8RD48iHKdmxgsK9MnFnEnRUYF683S9G_m62UXYKOYOmDBHf5M-k/pub?output=csv";
 
-  // Generic CSV fetcher
+  // ✅ --- CSV FETCH ---
   const fetchCSV = (callback, header = true) => {
     Papa.parse(csvUrl, {
       download: true,
@@ -26,7 +26,7 @@ const AppContextProvider = ({ children }) => {
     });
   };
 
-  // Fetch modules from CSV
+  // ✅ --- MODULE FETCH ---
   const fetchModules = () => {
     fetchCSV((results) => {
       const rows = results.data.map((row) => Object.values(row));
@@ -67,12 +67,11 @@ const AppContextProvider = ({ children }) => {
     }, false);
   };
 
-  // Fetch students + attendance
+  // ✅ --- STUDENT + ATTENDANCE FETCH ---
   const fetchStudentsAndAttendance = () => {
     const studentsRef = ref(database, "students");
     const attendanceRef = ref(database, "attendance");
 
-    // Fetch Firebase students
     onValue(studentsRef, (snapshot) => {
       const fbData = snapshot.val();
       const studentMap = fbData
@@ -82,14 +81,13 @@ const AppContextProvider = ({ children }) => {
               regNum: fbData[key].regNum || "",
               name: fbData[key].name,
               fingerprintId: fbData[key].fingerprintId || fbData[key].id,
-              attendance: Array(14).fill(0),
-              timestamps: Array(14).fill(null),
+              attendance: [],
+              timestamps: [],
             };
             return acc;
           }, {})
         : {};
 
-      // Fetch attendance
       onValue(attendanceRef, (snapshot2) => {
         const attData = snapshot2.val();
         if (attData) {
@@ -97,12 +95,8 @@ const AppContextProvider = ({ children }) => {
             const att = attData[key];
             const student = studentMap[att.id];
             if (student) {
-              // Find first 0 slot
-              const idx = student.attendance.findIndex((v) => v === 0);
-              if (idx !== -1) {
-                student.attendance[idx] = 1;
-                student.timestamps[idx] = att.timestamp;
-              }
+              student.attendance.push(1);
+              student.timestamps.push(att.timestamp);
             }
           });
         }
@@ -112,12 +106,108 @@ const AppContextProvider = ({ children }) => {
     });
   };
 
+  // ✅ --- HELPERS MOVED FROM ATTENDANCE COMPONENT ---
+  const groupedStudents = (monthDays, search = "", attendanceFilter = "all") => {
+    const studentMap = {};
+    students.forEach((att) => {
+      if (!att.fingerprintId || !att.name || !att.timestamps) return;
+      if (!studentMap[att.fingerprintId])
+        studentMap[att.fingerprintId] = {
+          id: att.fingerprintId,
+          name: att.name,
+          indexNum: att.indexNum,
+          timestamps: [],
+        };
+      studentMap[att.fingerprintId].timestamps.push(...att.timestamps);
+    });
+
+    return Object.values(studentMap)
+      .map((student) => {
+        const dailyAttendance = monthDays.map((day) => {
+          const tsForDay = student.timestamps
+            .map((ts) => new Date(ts))
+            .filter(
+              (d) =>
+                d.getDate() === day.date.getDate() &&
+                d.getMonth() === day.date.getMonth() &&
+                d.getFullYear() === day.date.getFullYear()
+            );
+
+          if (tsForDay.length > 0) {
+            const uniqueTimes = [
+              ...new Set(
+                tsForDay.map((d) =>
+                  d.toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                )
+              ),
+            ];
+            return `P (${uniqueTimes.join(", ")})`;
+          } else return "";
+        });
+
+        const presentCount = dailyAttendance.filter((a) =>
+          a.startsWith("P")
+        ).length;
+        const percentage = (
+          (presentCount / dailyAttendance.length) *
+          100
+        ).toFixed(2);
+
+        return { ...student, dailyAttendance, percentage };
+      })
+      .filter(
+        (student) =>
+          student.name.toLowerCase().includes(search.toLowerCase()) ||
+          student.indexNum?.toLowerCase().includes(search.toLowerCase())
+      )
+      .filter((student) => {
+        if (attendanceFilter === "above80") return student.percentage >= 80;
+        if (attendanceFilter === "below80") return student.percentage < 80;
+        return true;
+      });
+  };
+
+  const calculateCustomPercentage = (monthDays, startDate, endDate) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const percentMap = {};
+    groupedStudents(monthDays).forEach((student) => {
+      const countInRange = monthDays
+        .map((day, idx) => ({
+          date: day.date,
+          status: student.dailyAttendance[idx],
+        }))
+        .filter((d) => d.date >= start && d.date <= end);
+
+      const presentCount = countInRange.filter((d) =>
+        d.status.startsWith("P")
+      ).length;
+      const totalCount = countInRange.length;
+      percentMap[student.id] =
+        totalCount === 0
+          ? 0
+          : ((presentCount / totalCount) * 100).toFixed(2);
+    });
+    return percentMap;
+  };
+
+  // --- INIT ---
   useEffect(() => {
     fetchModules();
     fetchStudentsAndAttendance();
   }, []);
 
-  const value = { students, modules, data, loading };
+  const value = {
+    students,
+    modules,
+    data,
+    loading,
+    groupedStudents,
+    calculateCustomPercentage,
+  };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };

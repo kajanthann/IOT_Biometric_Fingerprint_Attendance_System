@@ -1,40 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { ref, onValue } from "firebase/database";
-import { database } from "../firebase";
-
-// Convert "HH:MM" → minutes
-const timeToMinutes = (timeStr) => {
-  const [h, m] = timeStr.split(":").map(Number);
-  return h * 60 + m;
-};
-
-// Check if a Date object is inside a slot
-const isInSlot = (date, slot) => {
-  const mins = date.getHours() * 60 + date.getMinutes();
-  return mins >= timeToMinutes(slot.start) && mins <= timeToMinutes(slot.end);
-};
-
-// Keep only the first attendance in each slot
-const filterBySlots = (timestamps, slots) => {
-  const kept = [];
-  slots.forEach((slot) => {
-    const inSlot = timestamps
-      .map((ts) => new Date(ts))
-      .filter((d) => isInSlot(d, slot));
-
-    if (inSlot.length > 0) {
-      const earliest = inSlot.reduce((a, b) => (a < b ? a : b));
-      kept.push(earliest.toISOString());
-    }
-  });
-  return kept;
-};
+import React, { useState, useEffect, useContext } from "react";
+import { AppContext } from "../context/AppContext";
+import { filterBySlots } from "../utils/attendanceUtils";
 
 const Attendance = ({ day, timeSlots = [] }) => {
+  const { students, loading } = useContext(AppContext);
   const [search, setSearch] = useState("");
-  const [students, setStudents] = useState([]);
   const [attendanceFilter, setAttendanceFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
   const [view, setView] = useState("summary"); // "summary" | "raw"
 
   const today = new Date();
@@ -45,8 +16,8 @@ const Attendance = ({ day, timeSlots = [] }) => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [customPercent, setCustomPercent] = useState({});
+  const [showTimesMap, setShowTimesMap] = useState({});
 
-  // Generate days in the month
   const generateMonthDays = (year, month) => {
     const date = new Date(year, month - 1, 1);
     const days = [];
@@ -59,29 +30,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
   };
 
   const [monthDays, setMonthDays] = useState(generateMonthDays(year, month));
-
-  useEffect(() => {
-    setMonthDays(generateMonthDays(year, month));
-  }, [month, year]);
-
-  // Fetch all attendance
-  useEffect(() => {
-    const attendanceRef = ref(database, "attendance");
-    onValue(attendanceRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        setStudents([]);
-        setLoading(false);
-        return;
-      }
-      const records = Object.keys(data).map((key) => ({
-        firebaseId: key,
-        ...data[key],
-      }));
-      setStudents(records);
-      setLoading(false);
-    });
-  }, []);
+  useEffect(() => setMonthDays(generateMonthDays(year, month)), [month, year]);
 
   const handlePrevMonth = () => {
     if (month === 1) {
@@ -97,91 +46,119 @@ const Attendance = ({ day, timeSlots = [] }) => {
     } else setMonth(month + 1);
   };
 
-  // --- Summary View ---
   const groupedStudents = () => {
-    const studentMap = {};
-    students.forEach((att) => {
-      if (!att.id || !att.name || !att.timestamp) return;
-      if (!studentMap[att.id]) {
-        studentMap[att.id] = { id: att.id, name: att.name, indexNum: att.indexNum, timestamps: [] };
-      }
-      studentMap[att.id].timestamps.push(att.timestamp);
-    });
+    return students
+      .map((student) => {
+        if (!student.timestamps) return null;
 
-    return Object.values(studentMap).map((student) => {
-      let filteredTimestamps = [...student.timestamps];
-      if (timeSlots.length > 0) {
-        filteredTimestamps = filterBySlots(student.timestamps, timeSlots);
-      }
+        let filteredTimestamps = student.timestamps.filter(Boolean);
+        if (timeSlots.length > 0)
+          filteredTimestamps = filterBySlots(student.timestamps, timeSlots);
 
-      const dailyAttendance = monthDays.map((day) => {
-        const tsForDay = filteredTimestamps
-          .map((ts) => new Date(ts))
-          .filter(
-            (d) =>
-              d.getDate() === day.date.getDate() &&
-              d.getMonth() === day.date.getMonth() &&
-              d.getFullYear() === day.date.getFullYear()
-          );
+        const dailyAttendance = monthDays.map((dayObj) => {
+          const dayDate = dayObj.date;
+          // Only show for past or today
+          if (dayDate > today) return "";
 
-        if (tsForDay.length > 0) {
-          const timesStr = tsForDay
-            .map((d) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }))
-            .join(", ");
-          return `P (${timesStr})`;
-        } else return "";
+          const tsForDay = filteredTimestamps
+            .map((ts) => new Date(ts))
+            .filter(
+              (d) =>
+                d.getDate() === dayDate.getDate() &&
+                d.getMonth() === dayDate.getMonth() &&
+                d.getFullYear() === dayDate.getFullYear()
+            );
+
+          if (tsForDay.length > 0) {
+            const uniqueTimes = [
+              ...new Set(
+                tsForDay.map((d) =>
+                  d.toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                )
+              ),
+            ];
+            return `P (${uniqueTimes.join(", ")})`;
+          } else {
+            return "A"; // Absent for past/today
+          }
+        });
+
+        const presentCount = dailyAttendance.filter((a) => a.startsWith("P")).length;
+        const percentage = ((presentCount / dailyAttendance.filter(a => a !== "").length) * 100).toFixed(2);
+
+        return { ...student, dailyAttendance, percentage };
+      })
+      .filter(Boolean)
+      .filter(
+        (student) =>
+          student.name.toLowerCase().includes(search.toLowerCase()) ||
+          student.indexNum?.toLowerCase().includes(search.toLowerCase())
+      )
+      .filter((student) => {
+        if (attendanceFilter === "above80") return student.percentage >= 80;
+        if (attendanceFilter === "below80") return student.percentage < 80;
+        return true;
       });
-
-      const presentCount = dailyAttendance.filter((a) => a.startsWith("P")).length;
-      const percentage = ((presentCount / dailyAttendance.length) * 100).toFixed(2);
-
-      return { ...student, dailyAttendance, percentage };
-    })
-    .filter(
-      (student) =>
-        student.name.toLowerCase().includes(search.toLowerCase()) ||
-        student.indexNum?.toLowerCase().includes(search.toLowerCase())
-    )
-    .filter((student) => {
-      if (attendanceFilter === "above80") return student.percentage >= 80;
-      if (attendanceFilter === "below80") return student.percentage < 80;
-      return true;
-    });
   };
 
   const calculateCustomPercentage = () => {
     const start = new Date(startDate);
     const end = new Date(endDate);
-
     const percentMap = {};
     groupedStudents().forEach((student) => {
       const countInRange = monthDays
-        .map((day, idx) => ({ date: day.date, status: student.dailyAttendance[idx] }))
-        .filter((d) => d.date >= start && d.date <= end);
+        .map((day, idx) => ({
+          date: day.date,
+          status: student.dailyAttendance[idx],
+        }))
+        .filter((d) => d.date >= start && d.date <= end && d.status !== "");
 
       const presentCount = countInRange.filter((d) => d.status.startsWith("P")).length;
       const totalCount = countInRange.length;
-      percentMap[student.id] = totalCount === 0 ? 0 : ((presentCount / totalCount) * 100).toFixed(2);
+      percentMap[student.id] =
+        totalCount === 0 ? 0 : ((presentCount / totalCount) * 100).toFixed(2);
     });
-
     setCustomPercent(percentMap);
     setShowDatePicker(false);
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4">
       {/* View Toggle */}
       <div className="flex gap-2 mb-4">
-        <button onClick={() => setView("summary")} className={`px-4 py-2 rounded ${view === "summary" ? "bg-green-500 text-white" : "bg-gray-200"}`}>Summary View</button>
-        <button onClick={() => setView("raw")} className={`px-4 py-2 rounded ${view === "raw" ? "bg-blue-500 text-white" : "bg-gray-200"}`}>Raw Logs View</button>
+        <button
+          onClick={() => setView("summary")}
+          className={`px-4 py-2 rounded ${view === "summary" ? "bg-green-500 text-white" : "bg-gray-200"}`}
+        >
+          Summary
+        </button>
+        <button
+          onClick={() => setView("raw")}
+          className={`px-4 py-2 rounded ${view === "raw" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+        >
+          Raw Logs
+        </button>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <input type="text" placeholder="Search by Name / Index..." className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+        <input
+          type="text"
+          placeholder="Search Name/Index..."
+          className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         {view === "summary" && (
-          <select className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400" value={attendanceFilter} onChange={(e) => setAttendanceFilter(e.target.value)}>
-            <option value="all">All Students</option>
+          <select
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+            value={attendanceFilter}
+            onChange={(e) => setAttendanceFilter(e.target.value)}
+          >
+            <option value="all">All</option>
             <option value="above80">Above 80%</option>
             <option value="below80">Below 80%</option>
           </select>
@@ -189,56 +166,100 @@ const Attendance = ({ day, timeSlots = [] }) => {
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center min-h-[300px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4" style={{ color: "#02c986" }} />
+        <div className="flex justify-center items-center min-h-[200px]">
+          <div
+            className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4"
+            style={{ color: "#02c986" }}
+          />
         </div>
       ) : view === "raw" ? (
-        <div className="overflow-x-auto shadow-md rounded-lg">
-          <table className="min-w-full border border-gray-200 text-center">
+        <div className="overflow-x-auto">
+          <table className="min-w-full border text-center">
             <thead className="bg-blue-600 text-white sticky top-0">
               <tr>
-                <th>#</th><th>Name</th><th>Index</th><th>Timestamp</th><th>Date/Time</th>
+                <th className="py-1 px-2 border">#</th>
+                <th className="py-1 px-2 border">Name</th>
+                <th className="py-1 px-2 border">Index</th>
+                <th className="py-1 px-2 border">Timestamps</th>
               </tr>
             </thead>
             <tbody>
               {students.length === 0 ? (
-                <tr><td colSpan="5" className="py-4 text-center text-gray-500 italic">No attendance found.</td></tr>
-              ) : students.map((att, index) => (
-                <tr key={att.firebaseId} className="hover:bg-gray-100">
-                  <td>{index + 1}</td><td>{att.name}</td><td>{att.indexNum}</td><td>{att.timestamp}</td><td>{new Date(att.timestamp).toLocaleString()}</td>
+                <tr>
+                  <td colSpan="4" className="py-4 text-gray-500 italic">
+                    No attendance found.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                students.map((s, idx) => (
+                  <tr key={s.fingerprintId || idx} className="hover:bg-gray-100">
+                    <td className="py-1 px-2 border">{idx + 1}</td>
+                    <td className="py-1 px-2 border">{s.name}</td>
+                    <td className="py-1 px-2 border">{s.indexNum}</td>
+                    <td className="py-1 px-2 border text-left">
+                      {s.timestamps.filter(Boolean).map((ts, i) => (
+                        <div key={i}>{new Date(ts).toLocaleString()}</div>
+                      ))}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       ) : (
-        <div className="overflow-x-auto shadow-md rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="cursor-pointer" onClick={handlePrevMonth}>⬅</span>
-            {month}/{year}
-            <span className="cursor-pointer" onClick={handleNextMonth}>➡</span>
+        <div className="overflow-x-auto">
+          <div className="flex gap-2 items-center p-4">
+            <h1 className="text-2xl font-bold">Attendance</h1>
+            <div className="flex items-center gap-2">
+              <span className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white" onClick={handlePrevMonth}>←</span>
+              <span>{month}/{year}</span>
+              <span className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white" onClick={handleNextMonth}>→</span>
+            </div>
           </div>
-          <table className="min-w-full border border-gray-200 text-center">
+          
+          <table className="min-w-full border text-center">
             <thead className="bg-green-600 text-white sticky top-0">
               <tr>
-                <th>#</th><th>Name</th><th>Index</th>
+                <th className="py-1 px-2 border">#</th>
+                <th className="py-1 px-2 border">Name</th>
+                <th className="py-1 px-2 border">Index</th>
                 {monthDays.map((day, idx) => (
-                  <th key={idx} className="py-1 px-2 border text-xs">{day.dayName}<br/>{day.date.getDate()}</th>
+                  <th key={idx} className="py-1 px-2 border text-xs">
+                    {day.dayName}<br />{day.date.getDate()}
+                  </th>
                 ))}
-                <th>%</th>
+                <th className="py-2 px-2 border bg-blue-500 relative">
+                  <div className="cursor-pointer" onClick={() => setShowDatePicker(!showDatePicker)}>%</div>
+                  {showDatePicker && (
+                    <div className="absolute bg-white border p-2 rounded shadow-lg z-10 top-10 left-[-155px] flex flex-col gap-2">
+                      <input type="date" className="border text-xs rounded px-1 py-1" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                      <input type="date" className="border text-xs rounded px-1 py-1" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                      <div className="flex justify-between gap-2">
+                        <button className="bg-green-500 text-white px-2 py-1 rounded" onClick={calculateCustomPercentage}>Calculate</button>
+                        <button className="bg-blue-500 text-white px-2 py-1 rounded" onClick={() => setShowDatePicker(false)}>X</button>
+                      </div>
+                    </div>
+                  )}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {groupedStudents().length === 0 ? (
-                <tr><td colSpan={monthDays.length + 4} className="py-4 text-center text-gray-500 italic">No students found.</td></tr>
-              ) : groupedStudents().map((student, index) => (
-                <tr key={student.id} className="hover:bg-gray-100">
-                  <td>{index + 1}</td>
-                  <td>{student.name}</td>
-                  <td>{student.indexNum}</td>
-                  {student.dailyAttendance.map((att, idx) => (
-                    <td key={idx} className={`py-1 px-2 border font-bold ${att.startsWith("P") ? "bg-green-200" : "bg-gray-50"}`}>{att}</td>
-                  ))}
+              {groupedStudents().map((student, idx) => (
+                <tr key={student.fingerprintId || idx} className="hover:bg-gray-100">
+                  <td className="py-1 px-2 border">{idx + 1}</td>
+                  <td className="py-1 px-2 border">{student.name}</td>
+                  <td className="py-1 px-2 border">{student.indexNum}</td>
+                  {student.dailyAttendance.map((att, dIdx) => {
+                    const cellKey = `${student.id}-${dIdx}`;
+                    const showTime = showTimesMap[cellKey] || false;
+                    return (
+                      <td key={dIdx} className={`py-1 px-2 border font-bold ${att.startsWith("P") ? "bg-green-200 cursor-pointer" : att === "A" ? "bg-red-200 text-red-500" : ""}`}
+                          onClick={() => { if(att.startsWith("P")) { setShowTimesMap(prev => ({...prev, [cellKey]: !prev[cellKey]})) } }}>
+                        {att.startsWith("P") ? <>P {showTime && <span className="text-[10px] font-normal">({att.slice(3,-1)})</span>}</> : att === "A" ? "A" : ""}
+                      </td>
+                    );
+                  })}
                   <td className="py-2 px-2 border font-bold">{customPercent[student.id] ?? student.percentage}%</td>
                 </tr>
               ))}

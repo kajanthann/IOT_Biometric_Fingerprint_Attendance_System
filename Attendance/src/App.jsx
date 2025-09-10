@@ -12,7 +12,6 @@ import ModuleDetails from './pages/ModuleDetails'
 const App = () => {
   return (
     <div className=''>
-      
       <Header />
       <Routes>
         <Route path='/' element={<Dashboard />} />
