@@ -1,5 +1,5 @@
 {
-  "homepage": "https://kajanthann.github.io/ESP32_IOT_STUDENT_FINGERPRINT_ATTENDANCE_SYSTEM ",
+  "homepage": "https://kajanthann.github.io/ESP32_IOT_STUDENT_FINGERPRINT_ATTENDANCE_SYSTEM/Attendance",
   "name": "attendance",
   "private": true,
   "version": "0.0.0",
@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d build"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.12",

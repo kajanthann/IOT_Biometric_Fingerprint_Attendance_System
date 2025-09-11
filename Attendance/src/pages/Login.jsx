@@ -19,6 +19,7 @@ const Login = ({ setToken, setAdminEmail }) => {  // Added setAdminEmail
       const user = userCredential.user;
 
       // Only allow admin email
+      // 123$Asdf
       const ADMIN_EMAIL = "smarfingeriot32@gmail.com"; // Use a constant for consistency
       if (user.email !== ADMIN_EMAIL) {
         setError("You are not authorized as admin.");
