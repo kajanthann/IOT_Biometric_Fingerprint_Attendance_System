@@ -12,6 +12,8 @@ const AppContextProvider = ({ children }) => {
   const [data, setData] = useState([]); // raw CSV data if needed
   const [loading, setLoading] = useState(true);
 
+  const ADMIN_EMAIL = "smarfingeriot32@gmail.com";
+
   const csvUrl =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vQw3N9IWLeLtfrevd9rwZzzJHJYw8RD48iHKdmxgsK9MnFnEnRUYF683S9G_m62UXYKOYOmDBHf5M-k/pub?output=csv";
 

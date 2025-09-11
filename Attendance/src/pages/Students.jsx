@@ -3,35 +3,39 @@ import React, { useContext, useState } from "react";
 import { AppContext } from "../context/AppContext";
 import RegisterStudent from "../components/RegisterStudent";
 
-const Students = () => {
+const ADMIN_EMAIL = "smarfingeriot32@gmail.com";
+
+const Students = ({ token, adminEmail }) => {
   const { students, loading } = useContext(AppContext);
   const [showRegister, setShowRegister] = useState(false);
 
-  return (
-    <div className="p-6">
-      <div className="flex flex-column justify-between">
-        <h2 className="text-2xl font-bold mb-6">Student Details</h2>
+  const isAdmin = token && adminEmail === ADMIN_EMAIL;
 
-        {/* Register button */}
-        <div className="mb-4">
+  return (
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center mb-6">
+        <h2 className="text-2xl font-bold mb-4 md:mb-0">Student Details</h2>
+
+        {/* Register button (Admin only) */}
+        {isAdmin && (
           <button
             onClick={() => setShowRegister(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 md:px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-200"
           >
             <i className="fa fa-user-plus"></i>
             <span>Reg Student</span>
           </button>
-        </div>
+        )}
       </div>
 
       {/* Popup modal for RegisterStudent */}
       {showRegister && (
-        <div className="fixed inset-0 flex items-center justify-center bg-opacity-40 backdrop-blur-xs z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-5xl relative border border-green-400">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-4xl relative border border-green-400">
             {/* Close button */}
             <button
               onClick={() => setShowRegister(false)}
-              className="absolute top-2 text-xl font-bold right-2 text-gray-600 hover:text-black"
+              className="absolute top-2 right-2 text-xl font-bold text-gray-600 hover:text-black"
             >
               ✕
             </button>
@@ -57,11 +61,11 @@ const Students = () => {
           <table className="min-w-full border border-gray-200 text-center">
             <thead className="bg-green-600 text-white">
               <tr>
-                <th className="py-2 px-4 border">#</th>
-                <th className="py-2 px-4 border">ID</th>
-                <th className="py-2 px-4 border">Fingerprint ID</th>
-                <th className="py-2 px-4 border">Name</th>
-                <th className="py-2 px-4 border">RegNum</th>
+                <th className="py-2 px-2 md:px-4 border">#</th>
+                <th className="py-2 px-2 md:px-4 border">ID</th>
+                <th className="py-2 px-2 md:px-4 border">Fingerprint ID</th>
+                <th className="py-2 px-2 md:px-4 border">Name</th>
+                <th className="py-2 px-2 md:px-4 border">RegNum</th>
               </tr>
             </thead>
             <tbody>
@@ -70,13 +74,13 @@ const Students = () => {
                   key={student.indexNum}
                   className="hover:bg-gray-100 transition-colors"
                 >
-                  <td className="py-2 px-4 border">{index + 1}</td>
-                  <td className="py-2 px-4 border">{student.indexNum}</td>
-                  <td className="py-2 px-4 border">
+                  <td className="py-1 md:py-2 px-2 md:px-4 border">{index + 1}</td>
+                  <td className="py-1 md:py-2 px-2 md:px-4 border">{student.indexNum}</td>
+                  <td className="py-1 md:py-2 px-2 md:px-4 border">
                     {"FID_156" + student.fingerprintId}
                   </td>
-                  <td className="py-2 px-4 border">{student.name}</td>
-                  <td className="py-2 px-4 border">{student.regNum}</td>
+                  <td className="py-1 md:py-2 px-2 md:px-4 border">{student.name}</td>
+                  <td className="py-1 md:py-2 px-2 md:px-4 border">{student.regNum}</td>
                 </tr>
               ))}
             </tbody>
