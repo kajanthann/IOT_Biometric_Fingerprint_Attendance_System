@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { ref, set, onValue, off } from "firebase/database";
 import { database } from "../firebase"; // Your initialized Firebase DB
+import { AppContext } from "../context/AppContext";
 
 const RegisterStudent = () => {
   const [name, setName] = useState("");
@@ -8,6 +9,7 @@ const RegisterStudent = () => {
   const [indexNum, setIndexNum] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { espStatus } = useContext(AppContext);
 
   useEffect(() => {
     const msgRef = ref(database, "/messages");
@@ -84,24 +86,34 @@ const RegisterStudent = () => {
             className="border p-2 my-2 w-full"
             disabled={loading}
           />
-          <button
-            className={`px-4 py-2 mt-3 rounded ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-green-500 hover:bg-green-600 text-white"
-            }`}
-            onClick={startEnroll}
-            disabled={loading}
-          >
-            {loading ? (
-              <div className="flex items-center gap-2 justify-center">
-                <div className="w-5 h-5 border-4 border-t-4 border-t-green-500 border-gray-200 rounded-full animate-spin"></div>
-                Enrolling...
-              </div>
-            ) : (
-              "Start Enroll"
-            )}
-          </button>
+          <div className="flex items-center justify-between mt-4">
+            <button
+              onClick={startEnroll}
+              disabled={loading}
+              className={`px-5 py-2 rounded font-semibold ${
+                loading ? "bg-gray-400 cursor-not-allowed" : "bg-green-500 hover:bg-green-600 text-white"
+              }`}
+            >
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-4 border-t-4 border-t-green-500 border-gray-200 rounded-full animate-spin"></div>
+                  Enrolling...
+                </div>
+              ) : (
+                "Start Enroll"
+              )}
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-3.5 h-3.5 border-2 rounded-full ${
+                  espStatus === "ONLINE" ? "bg-green-500 animate-pulse" : "bg-red-500"
+                }`}
+              ></span>
+              <span className="text-sm font-medium">{espStatus}</span>
+            </div>
+          </div>
+          
         </div>
 
         {/* Enrollment Messages */}

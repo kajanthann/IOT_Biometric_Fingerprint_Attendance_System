@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { NavLink } from "react-router-dom";
 import profile from "../assets/upload_area.png";
+import { AppContext } from "../context/AppContext";
 
 const ADMIN_EMAIL = "smarfingeriot32@gmail.com";
 
 const Header = ({ token, setToken, adminEmail }) => {
+
   const [menuOpen, setMenuOpen] = useState(false);
+  const { espStatus } = useContext(AppContext);
 
   const handleLogout = () => {
     setToken("");
@@ -19,9 +22,14 @@ const Header = ({ token, setToken, adminEmail }) => {
           <div className="text-4xl flex items-center cursor-pointer">
             F <span>O</span>C
             <span className="text-black text-xs ml-[-12px] mt-[2px] align-middle">Attendance</span>
+            <span
+              className={`text-xs w-3.5 h-3.5 border-2 rounded-full ml-[-7px] mt-[-20px] align-middle ${
+                espStatus === "ONLINE" ? "bg-green-400 animate-pulse" : "bg-red-500"
+              }`
+            }
+            ></span>
           </div>
         </NavLink>
-
         {/* Desktop Nav */}
         <nav className="hidden md:flex space-x-6 items-center font-medium relative">
           <NavLink to="/home" className={({ isActive }) => (isActive ? "font-bold underline" : "")}>

@@ -25,12 +25,6 @@ Adafruit_Fingerprint finger(&mySerial);
 #define RED_LED 4
 
 
-WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-config.database_url = FIREBASE_HOST;
-config.signer.tokens.legacy_token = FIREBASE_AUTH;
-
-
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
@@ -46,22 +40,28 @@ uint8_t studentCount = 0;
 
 bool firebaseReady = false;
 
-enum SystemState { IDLE, ENROLL, VERIFY };
-SystemState currentState = IDLE;
+// System states
+enum SystemState { VERIFY, ENROLL };
+SystemState currentState = VERIFY;
 
-// NTP time settings
-const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 19800;   // GMT+5:30 (Sri Lanka/India)
+
+// NTP settings
+const char *ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 19800;  // GMT+5:30
 const int daylightOffset_sec = 0;
 
 // ---------------- Function Prototypes ----------------
-void oledMsg(String msg, uint8_t line = 0);
+void oledMsg(String msg, uint8_t line = 0, bool sendToFirebase = false);
 void oledIdle();
-void enrollFinger();
-void verifyFinger();
+void enrollFinger(FirebaseJson &enrollDataJson);
+void verifyFingerNonBlocking();
 bool writeFirebase(String path, FirebaseJson &json);
 String getTimestamp();
+bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &indexNum);
+void reconnectWiFi();
+void reconnectFirebase();
 
+// ---------------- Setup ----------------
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -90,7 +90,9 @@ void setup() {
   if (finger.verifyPassword()) {
     oledMsg("AS608 Found!");
     Serial.println("AS608 Found!");
-    Serial.print("Sensor contains "); Serial.print(finger.templateCount); Serial.println(" templates");
+    Serial.print("Sensor contains ");
+    Serial.print(finger.templateCount);
+    Serial.println(" templates");
   } else {
     oledMsg("AS608 NOT FOUND!");
     Serial.println("Check wiring!");
@@ -98,29 +100,8 @@ void setup() {
     while (1) delay(1);
   }
 
-  // Connect Wi-Fi
-  oledMsg("Connecting Wi-Fi...");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    if (millis() - start > 20000) break;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    oledMsg("Wi-Fi Connected!");
-    Serial.println("Wi-Fi Connected. IP: " + WiFi.localIP().toString());
-    digitalWrite(GREEN_LED,HIGH);
-
-    // Init NTP
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  } else {
-    oledMsg("Wi-Fi Failed!");
-    Serial.println("Wi-Fi connection failed");
-    digitalWrite(RED_LED, HIGH);
-  }
+  reconnectWiFi();
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   // Firebase init
   config.database_url = FIREBASE_HOST;
@@ -132,126 +113,176 @@ void setup() {
     firebaseReady = true;
     oledMsg("Firebase Ready!");
     Serial.println("Firebase Ready");
+    Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
   } else {
     oledMsg("Firebase Failed!");
     Serial.println("Firebase init failed");
   }
 
-  currentState = IDLE;
+  currentState = VERIFY;
   oledIdle();
 }
 
+// ---------------- Loop ----------------
+unsigned long lastHeartbeat = 0;
+
 void loop() {
-  switch (currentState) {
-    case IDLE:
-      if (Serial.available()) {
-        char key = Serial.read();
-        while (Serial.available()) Serial.read();
-        if (key == '1') currentState = ENROLL;
-        else if (key == '2') currentState = VERIFY;
-        else Serial.println("Invalid key. Press 1 or 2");
-      }
-      break;
-
-    case ENROLL:
-      enrollFinger();
-      currentState = IDLE;
-      oledIdle();
-      break;
-
-    case VERIFY:
-      verifyFinger();
-      currentState = IDLE;
-      oledIdle();
-      break;
+  // Auto-reconnect checks
+  if (WiFi.status() != WL_CONNECTED) {
+    reconnectWiFi();
   }
-  delay(100);
+  if (!Firebase.ready()) {
+    firebaseReady = false;
+    reconnectFirebase();
+  } else {
+    firebaseReady = true;
+  }
+
+  // Heartbeat every 10s
+  if (firebaseReady && millis() - lastHeartbeat > 10000) {
+    String isoTime = getTimestamp();
+    Firebase.RTDB.setString(&fbdo, "/status", isoTime);
+    lastHeartbeat = millis();
+  }
+
+  if (!firebaseReady) return;
+
+  // Read system state from Firebase
+  String state = "";
+  if (Firebase.RTDB.getString(&fbdo, "/systemState")) {
+    state = fbdo.stringData();
+  }
+
+  // If enrollment requested from frontend
+  if (state == "ENROLL" && currentState != ENROLL) {
+    currentState = ENROLL;
+
+    FirebaseJson enrollJson;
+    if (Firebase.RTDB.getJSON(&fbdo, "/enrollData")) {
+      enrollJson = fbdo.jsonObject();
+    }
+
+    oledMsg("Enrollment Started...", 0, true);
+    enrollFinger(enrollJson);
+
+    // After enrollment, revert to VERIFY
+    Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
+    currentState = VERIFY;
+    oledIdle();
+  }
+
+  // Non-blocking verification
+  if (state == "VERIFY" && currentState == VERIFY) {
+    verifyFingerNonBlocking();
+  }
+
+  delay(50);
 }
 
 // ---------------- OLED helpers ----------------
-void oledMsg(String msg, uint8_t line) {
+void oledMsg(String msg, uint8_t line, bool sendToFirebase) {
   display.clearDisplay();
   display.setCursor(0, line * 10);
   display.println(msg);
   display.display();
   Serial.println("OLED: " + msg);
+
+  if (sendToFirebase && firebaseReady) {
+    FirebaseJson json;
+    json.set("msg", msg);
+    Firebase.RTDB.pushJSON(&fbdo, "/messages", &json);
+  }
 }
 
 void oledIdle() {
   display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("Press 1-Enroll");
-  display.setCursor(0,10);
-  display.println("2-Verify");
+  display.setCursor(0, 0);
+  display.println("Waiting...");
   display.display();
 }
 
 // ---------------- Firebase helper ----------------
 bool writeFirebase(String path, FirebaseJson &json) {
-  if (WiFi.status() != WL_CONNECTED) WiFi.reconnect();
-  if (!Firebase.ready()) Firebase.begin(&config, &auth);
+  if (!firebaseReady) return false;
   return Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json);
 }
 
 // ---------------- Get Timestamp ----------------
 String getTimestamp() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    return "Unknown";
-  }
+  if (!getLocalTime(&timeinfo)) return "Unknown";
   char buffer[30];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &timeinfo); // ISO format
   return String(buffer);
 }
 
+// ---------------- Read enrollment data ----------------
+bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &indexNum) {
+  FirebaseJsonData jsonData;
+  if (!json.get(jsonData, "name")) return false;
+  name = jsonData.stringValue;
+  if (!json.get(jsonData, "regNum")) return false;
+  regNum = jsonData.stringValue;
+  if (!json.get(jsonData, "indexNum")) return false;
+  indexNum = jsonData.stringValue;
+  return true;
+}
+
 // ---------------- Enrollment ----------------
-void enrollFinger() {
-  if (studentCount >= 50) { oledMsg("Max students reached!"); return; }
-
-  uint8_t id = studentCount + 1;
-  int p = -1;
-  oledMsg("Place finger...");
-  Serial.println("Enroll ID: " + String(id));
-
-  // First scan
-  while (p != FINGERPRINT_OK) { p = finger.getImage(); delay(50); }
-  if (finger.image2Tz(1) != FINGERPRINT_OK) { oledMsg("Image fail"); return; }
-
-  // 🔥 Check if finger already exists
-  p = finger.fingerSearch();
-  if (p == FINGERPRINT_OK) {
-    oledMsg("Already Enrolled!");
-    Serial.println("Finger already exists! ID: " + String(finger.fingerID));
-    digitalWrite(RED_LED,HIGH);
-    delay(2000);
-    digitalWrite(RED_LED,LOW);
+void enrollFinger(FirebaseJson &enrollDataJson) {
+  if (studentCount >= 50) {
+    oledMsg("Max students!", 0, true);
     return;
   }
 
-  oledMsg("Remove finger");
+  String name, regNum, indexNum;
+  if (!readEnrollData(enrollDataJson, name, regNum, indexNum)) {
+    oledMsg("Invalid data!", 0, true);
+    return;
+  }
+
+  uint8_t id = studentCount + 1;
+  int p = -1;
+
+  oledMsg("Place finger...", 0, true);
+  while ((p = finger.getImage()) != FINGERPRINT_OK) {
+    if (p != FINGERPRINT_NOFINGER) oledMsg("Image error!", 0, true);
+    delay(50);
+  }
+  if (finger.image2Tz(1) != FINGERPRINT_OK) {
+    oledMsg("Image fail", 0, true);
+    return;
+  }
+
+  p = finger.fingerSearch();
+  if (p == FINGERPRINT_OK) {
+    oledMsg("Already Enrolled!", 0, true);
+    if (firebaseReady) Firebase.RTDB.deleteNode(&fbdo, "/messages");
+    return;
+  }
+
+  oledMsg("Remove finger", 0, true);
   delay(2000);
   while (finger.getImage() != FINGERPRINT_NOFINGER);
 
-  oledMsg("Place same finger...");
-  p = -1;
-  while (p != FINGERPRINT_OK) { p = finger.getImage(); delay(50); }
-  if (finger.image2Tz(2) != FINGERPRINT_OK) { oledMsg("Image 2 fail"); return; }
+  oledMsg("Place again...", 0, true);
+  while ((p = finger.getImage()) != FINGERPRINT_OK) {
+    if (p != FINGERPRINT_NOFINGER) oledMsg("Image error!", 0, true);
+    delay(50);
+  }
+  if (finger.image2Tz(2) != FINGERPRINT_OK) {
+    oledMsg("2nd fail", 0, true);
+    return;
+  }
 
-  if (finger.createModel() != FINGERPRINT_OK) { oledMsg("Model fail"); return; }
-  if (finger.storeModel(id) != FINGERPRINT_OK) { oledMsg("Store fail"); return; }
-
-  // Get student details
-  oledMsg("Enter details in Serial",1);
-  Serial.println("Enter student's name:");
-  String name = ""; while (Serial.available() == 0) delay(100); name = Serial.readStringUntil('\n'); name.trim();
-
-  Serial.println("Enter student's RegNum:");
-  String regNum = ""; while (Serial.available() == 0) delay(100); regNum = Serial.readStringUntil('\n'); regNum.trim();
-
-  Serial.println("Enter student's IndexNum:");
-  String indexNum = ""; while (Serial.available() == 0) delay(100); indexNum = Serial.readStringUntil('\n'); indexNum.trim();
-
-  if (name.length() == 0) name = "Student_" + String(id);
+  if (finger.createModel() != FINGERPRINT_OK) {
+    oledMsg("Model fail", 0, true);
+    return;
+  }
+  if (finger.storeModel(id) != FINGERPRINT_OK) {
+    oledMsg("Store fail", 0, true);
+    return;
+  }
 
   students[studentCount].id = id;
   students[studentCount].name = name;
@@ -259,56 +290,60 @@ void enrollFinger() {
   students[studentCount].indexNum = indexNum;
   studentCount++;
 
-  oledMsg("Enrolled: " + name);
-  Serial.println("Enrolled: " + name + " with ID: " + String(id));
+  oledMsg("Enroll Success: " + name, 0, true);
 
   if (firebaseReady) {
+    Firebase.RTDB.deleteNode(&fbdo, "/messages");
     String path = "/students/" + String(id);
     FirebaseJson json;
     json.set("id", id);
     json.set("name", name);
     json.set("regNum", regNum);
     json.set("indexNum", indexNum);
-    if (writeFirebase(path,json)) {
-      oledMsg("Uploaded to Firebase",1);
-      Serial.println("Firebase upload success: " + path);
-    } else {
-      oledMsg("Firebase fail",1);
-      Serial.println("Firebase upload failed: " + fbdo.errorReason());
-    }
+    writeFirebase(path, json);
   }
-
-  digitalWrite(GREEN_LED,HIGH);
-  delay(1000);
-  digitalWrite(GREEN_LED,LOW);
 }
 
-// ---------------- Verification ----------------
-void verifyFinger() {
-  oledMsg("Place finger...");
-  int p = -1;
+// ---------------- Non-blocking Verification ----------------
+void verifyFingerNonBlocking() {
+  static unsigned long lastCheck = 0;
+  static bool showingMsg = false;
 
-  while (p != FINGERPRINT_OK) { p = finger.getImage(); delay(50); }
+  if (millis() - lastCheck < 200) return; // check every 200ms
+  lastCheck = millis();
 
-  if (finger.image2Tz(1) != FINGERPRINT_OK) { oledMsg("Image conv fail"); return; }
+  int p = finger.getImage();
+  if (p == FINGERPRINT_NOFINGER) {
+    if (!showingMsg) {
+      oledMsg("Place finger...", 0);
+      showingMsg = true;
+    }
+    return;
+  } else if (p != FINGERPRINT_OK) {
+    oledMsg("Image error!", 0);
+    showingMsg = false;
+    return;
+  }
 
-  p = finger.fingerFastSearch();
-  if (p == FINGERPRINT_OK) {
+  showingMsg = false;
+
+  if (finger.image2Tz(1) != FINGERPRINT_OK) {
+    oledMsg("Image conv fail", 0);
+    return;
+  }
+
+  if (finger.fingerFastSearch() == FINGERPRINT_OK) {
     uint8_t id = finger.fingerID;
-    String name = "Unknown";
-    String regNum = "";
-    String indexNum = "";
-    for (uint8_t i=0; i<studentCount; i++) {
-      if (students[i].id==id) {
-        name=students[i].name;
-        regNum=students[i].regNum;
-        indexNum=students[i].indexNum;
+    String name = "Unknown", regNum = "", indexNum = "";
+    for (uint8_t i = 0; i < studentCount; i++) {
+      if (students[i].id == id) {
+        name = students[i].name;
+        regNum = students[i].regNum;
+        indexNum = students[i].indexNum;
       }
     }
 
-    oledMsg("Welcome: " + name);
-    Serial.println("ID:" + String(id) + " Name:" + name);
-    digitalWrite(GREEN_LED,HIGH);
+    oledMsg("Welcome: " + name, 0);
 
     if (firebaseReady) {
       String path = "/attendance/" + String(id) + "_" + String(millis());
@@ -318,23 +353,36 @@ void verifyFinger() {
       json.set("regNum", regNum);
       json.set("indexNum", indexNum);
       json.set("timestamp", getTimestamp());
-      if (writeFirebase(path,json)) {
-        oledMsg("Attendance logged",1);
-        Serial.println("Firebase attendance uploaded: " + path);
-      } else {
-        oledMsg("Upload fail",1);
-        Serial.println("Firebase upload failed: " + fbdo.errorReason());
-      }
+      writeFirebase(path, json);
     }
-
-    delay(1500);
-    digitalWrite(GREEN_LED,LOW);
-
   } else {
-    oledMsg("No Match!");
-    Serial.println("Fingerprint not found");
-    digitalWrite(RED_LED,HIGH);
-    delay(1500);
-    digitalWrite(RED_LED,LOW);
+    oledMsg("No Match!", 0);
   }
+}
+
+// ---------------- Wi-Fi / Firebase Reconnect ----------------
+void reconnectWiFi() {
+  Serial.println("Reconnecting Wi-Fi...");
+  WiFi.disconnect();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(500);
+    Serial.print(".");
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWi-Fi Reconnected!");
+    digitalWrite(GREEN_LED, HIGH);
+    digitalWrite(RED_LED, LOW);
+  } else {
+    Serial.println("\nWi-Fi Failed!");
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(GREEN_LED, LOW);
+  }
+}
+
+void reconnectFirebase() {
+  Serial.println("Reconnecting Firebase...");
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
 }

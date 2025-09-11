@@ -11,6 +11,8 @@ const AppContextProvider = ({ children }) => {
   const [modules, setModules] = useState([]);
   const [data, setData] = useState([]); // raw CSV data if needed
   const [loading, setLoading] = useState(true);
+  const [espStatus, setEspStatus] = useState("OFFLINE"); // NEW: ESP32 status
+  const [lastSeen, setLastSeen] = useState(null); // NEW: lastSeen timestamp
 
   const ADMIN_EMAIL = "smarfingeriot32@gmail.com";
 
@@ -69,6 +71,37 @@ const AppContextProvider = ({ children }) => {
     }, false);
   };
 
+  /// --- ESP32 STATUS BASED ON HEARTBEAT ---
+  const fetchEspStatus = () => {
+    const statusRef = ref(database, "status"); // /status in Firebase
+    let lastValue = null;
+    let lastChangeTime = Date.now();
+
+    onValue(statusRef, (snapshot) => {
+      const currentValue = snapshot.val();
+      if (!currentValue) return;
+
+      setLastSeen(currentValue);
+
+      if (lastValue === null || currentValue !== lastValue) {
+        setEspStatus("ONLINE");
+        lastChangeTime = Date.now(); // reset timer on value change
+      }
+
+      lastValue = currentValue;
+    });
+
+    // Timer to mark OFFLINE if no change in 10s
+    const interval = setInterval(() => {
+      if (lastChangeTime && Date.now() - lastChangeTime > 12000) {
+        setEspStatus("OFFLINE");
+      }
+    }, 1000); // check every 1 second
+
+    // Clean up interval if component unmounts
+    return () => clearInterval(interval);
+  };
+
   // ✅ --- STUDENT + ATTENDANCE FETCH ---
   const fetchStudentsAndAttendance = () => {
     const studentsRef = ref(database, "students");
@@ -109,7 +142,11 @@ const AppContextProvider = ({ children }) => {
   };
 
   // ✅ --- HELPERS MOVED FROM ATTENDANCE COMPONENT ---
-  const groupedStudents = (monthDays, search = "", attendanceFilter = "all") => {
+  const groupedStudents = (
+    monthDays,
+    search = "",
+    attendanceFilter = "all"
+  ) => {
     const studentMap = {};
     students.forEach((att) => {
       if (!att.fingerprintId || !att.name || !att.timestamps) return;
@@ -189,9 +226,7 @@ const AppContextProvider = ({ children }) => {
       ).length;
       const totalCount = countInRange.length;
       percentMap[student.id] =
-        totalCount === 0
-          ? 0
-          : ((presentCount / totalCount) * 100).toFixed(2);
+        totalCount === 0 ? 0 : ((presentCount / totalCount) * 100).toFixed(2);
     });
     return percentMap;
   };
@@ -200,6 +235,7 @@ const AppContextProvider = ({ children }) => {
   useEffect(() => {
     fetchModules();
     fetchStudentsAndAttendance();
+    fetchEspStatus();
   }, []);
 
   const value = {
@@ -207,6 +243,7 @@ const AppContextProvider = ({ children }) => {
     modules,
     data,
     loading,
+    espStatus,
     groupedStudents,
     calculateCustomPercentage,
   };
