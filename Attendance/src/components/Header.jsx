@@ -1,17 +1,20 @@
 import React, { useContext, useState } from "react";
 import { NavLink } from "react-router-dom";
-import profile from "../assets/upload_area.png";
 import { AppContext } from "../context/AppContext";
 
-const ADMIN_EMAIL = "smarfingeriot32@gmail.com";
-
 const Header = ({ token, setToken, adminEmail }) => {
-
   const [menuOpen, setMenuOpen] = useState(false);
-  const { espStatus } = useContext(AppContext);
+  const { espStatus, lastSeen } = useContext(AppContext);
 
   const handleLogout = () => {
     setToken("");
+  };
+
+  // Format lastSeen nicely
+  const formatLastSeen = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   };
 
   return (
@@ -19,17 +22,26 @@ const Header = ({ token, setToken, adminEmail }) => {
       <div className="flex justify-between items-center p-4 mx-auto">
         {/* Logo */}
         <NavLink to={"/home"}>
-          <div className="text-4xl flex items-center cursor-pointer">
+          <div className="text-4xl flex items-center cursor-pointer relative">
             F <span>O</span>C
             <span className="text-black text-xs ml-[-12px] mt-[2px] align-middle">Attendance</span>
+
+            {/* LED Status */}
             <span
-              className={`text-xs w-3.5 h-3.5 border-2 rounded-full ml-[-7px] mt-[-20px] align-middle ${
+              className={`w-3.5 h-3.5 border-2 rounded-full ml-[-7px] mt-[-20px] align-middle ${
                 espStatus === "ONLINE" ? "bg-green-400 animate-pulse" : "bg-red-500"
-              }`
-            }
+              }`}
             ></span>
+
+            {/* Last Seen */}
+            {espStatus === "OFFLINE" && lastSeen && (
+              <span className="text-[10px] text-black ml-2 mt-[-20px]">
+                Last Seen: {formatLastSeen(lastSeen)}
+              </span>
+            )}
           </div>
         </NavLink>
+
         {/* Desktop Nav */}
         <nav className="hidden md:flex space-x-6 items-center font-medium relative">
           <NavLink to="/home" className={({ isActive }) => (isActive ? "font-bold underline" : "")}>
@@ -49,13 +61,13 @@ const Header = ({ token, setToken, adminEmail }) => {
           </NavLink>
 
           {!token ? (
-            <NavLink to="/login" className={({ isActive }) => (isActive ? "font-bold underline" : " bg-indigo-500 px-3 py-1 rounded-lg")}>
+            <NavLink to="/login" className="bg-indigo-500 px-3 py-1 rounded-lg">
               Login
             </NavLink>
           ) : (
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-2 bg-indigo-600 text-left hover:bg-indigo-700 hover:cursor-pointer rounded-lg"
+              className="w-full px-4 py-2 bg-indigo-600 text-left hover:bg-indigo-700 rounded-lg"
             >
               Logout
             </button>
@@ -64,17 +76,8 @@ const Header = ({ token, setToken, adminEmail }) => {
 
         {/* Mobile Hamburger */}
         <div className="md:hidden flex items-center">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="focus:outline-none"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+          <button onClick={() => setMenuOpen(!menuOpen)} className="focus:outline-none">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {menuOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               ) : (

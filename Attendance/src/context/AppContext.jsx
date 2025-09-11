@@ -243,6 +243,7 @@ const AppContextProvider = ({ children }) => {
     modules,
     data,
     loading,
+    lastSeen,
     espStatus,
     groupedStudents,
     calculateCustomPercentage,
