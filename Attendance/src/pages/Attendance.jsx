@@ -157,7 +157,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
       {/* Filters */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
         <div className="flex gap-4 items-center p-4">
-          <h1 className="text-2xl font-bold hidden  text-left md:block">
+          <h1 className="text-2xl font-bold">
             Attendance
           </h1>
           <div className="flex items-center gap-2">
@@ -179,21 +179,21 @@ const Attendance = ({ day, timeSlots = [] }) => {
           </div>
           <div className="relative">
           <div
-            className="cursor-pointer px-3 bg-black text-white font-bold rounded pt-2 border"
+            className="cursor-pointer px-3 bg-black text-white font-bold rounded p-1 border"
             onClick={() => setShowDatePicker(!showDatePicker)}
           >
             %
           </div>
           {showDatePicker && (
-            <div className="absolute top-[-8px] left-10 bg-white border rounded p-2">
-              <div className="flex items-center gap-2">
+            <div className="absolute md:top-[-60px] top-[-10px] left-[-300px] md:left-[-100px] bg-white border rounded p-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="border border-gray-300 rounded px-2 focus:outline-none focus:ring-2 focus:ring-green-400"
                 />
-                <span>to</span>
+                <span></span>
                 <input
                   type="date"
                   value={endDate}

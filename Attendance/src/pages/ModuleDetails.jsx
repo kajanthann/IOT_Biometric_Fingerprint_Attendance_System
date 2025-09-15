@@ -25,40 +25,41 @@ const ModuleDetails = () => {
   if (loadingModules) {
     return (
       <div className="flex justify-center items-center min-h-[600px]">
-        <div
-          className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4"
-          style={{ color: "#02c986" }}
-        ></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#02c986] border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 mt-10">
+    <div className="container mx-auto px-4 py-8">
       {/* Module Name */}
-      <div className="bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-xl shadow-lg p-3 mb-8 text-center">
-        <h1 className="text-4xl font-bold">{moduleName}</h1>
+      <div className="bg-gradient-to-r from-[#02c986] to-[#3bb8ff] text-white rounded-2xl shadow-lg py-6 px-4 text-center mb-10">
+        <h1 className="text-3xl md:text-4xl font-bold">{moduleName}</h1>
+        {/* Schedule */}
+        {moduleData.length > 0 && (
+          <div className=" flex gap-3 mt-4">
+            <h2 className="text-xl md:text-2xl font-semibold text-gray-700">
+              Schedule →
+            </h2>
+            <div className="flex flex-wrap gap-3">
+              {moduleData.map((data, idx) => (
+                <span
+                  key={idx}
+                  className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium hover:bg-green-200 transition-colors"
+                >
+                  {data.day} ({data.time})
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Module Schedule */}
-      {moduleData.length > 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-xl p-4 mb-8">
-          <h2 className="text-2xl font-semibold text-left text-gray-700">
-            Schedule
-          </h2>
-          {moduleData.map((data, idx) => (
-            <span
-              key={idx}
-              className="bg-green-100 text-green-800 px-4 py-2 rounded-full font-medium hover:bg-green-200 transition-colors"
-            >
-              {data.day} ({data.time})
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Attendance Section */}
-      <div className="bg-white rounded-xl shadow-md mb-10 p-6">
+      {/* Attendance */}
+      <div className="bg-white shadow-md rounded-xl p-6">
+        <h2 className="text-xl md:text-2xl font-semibold text-gray-700 mb-4">
+          Attendance
+        </h2>
         <Attendance day={day} timeSlots={timeSlots} />
       </div>
     </div>

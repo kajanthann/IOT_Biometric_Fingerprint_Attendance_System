@@ -8,19 +8,19 @@ const Home = ({ token }) => {
   return (
     <div className="min-h-screen flex flex-col p-3 md:p-15">
       {/* Hero Section */}
-      <header className="flex flex-col md:flex-row rounded-3xl items-center justify-between bg-[#8ef4cc]">
+      <header className="flex flex-col lg:flex-row rounded-3xl items-center justify-between bg-[#8ef4cc]">
         {/* Left: Title + Emojis Flow */}
-        <div className="md:w-1/2 text-center md:text-left px-4 md:px-20 py-12">
+        <div className="lg:w-1/2 text-center md:text-left px-4 md:px-20 py-12">
           <h1 className="text-3xl md:text-5xl text-[#01996f] font-bold">
             Smart Attendance System
           </h1>
-          <p className="text md:text-xl max-w-md mt-4">
+          <p className="text md:text-xl my-5">
             IoT-enabled fingerprint biometric attendance tracking for
             classrooms, ensuring accuracy, security, and real-time monitoring.
           </p>
 
           {/* Emoji Process Visualization */}
-          <div className="mt-8 space-y-2 text-left md:text-xl font-medium text-gray-700">
+          <div className="mt-5 lg:mt-8 space-y-2 text-left md:text-xl font-medium text-gray-700">
             <p className="ml-5">
               → 👆🖐️  <span className="ml-2">Scan Fingerprint</span>
             </p>
@@ -40,7 +40,7 @@ const Home = ({ token }) => {
         </div>
 
         {/* Right: Hero Image */}
-        <div className="md:w-1/2">
+        <div className="lg:w-1/2">
           <img src={heroImg} alt="Hero" className="w-full md:rounded-r-3xl" />
         </div>
       </header>
@@ -48,7 +48,7 @@ const Home = ({ token }) => {
       {/* Features Section */}
       <section className="py-20 px-4 md:px-20 bg-white">
         <h2 className="text-3xl font-bold text-center mb-12">Features</h2>
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-8">
           <div className="p-6 border rounded-xl shadow hover:shadow-lg transition">
             <h3 className="text-xl font-semibold mb-3">
               Fingerprint Authentication

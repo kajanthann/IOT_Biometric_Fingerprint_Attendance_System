@@ -35,7 +35,7 @@ const Header = ({ token, setToken }) => {
 
             {/* Last Seen */}
             {token && espStatus === "OFFLINE" && lastSeen && (
-              <span className="text-[10px] text-black ml-1 bg-[#e0f9f0] rounded-full px-1 py-[2px] mt-2">
+              <span className="text-[10px] text-black ml-1 bg-[#e0f9f0] md:hidden lg:block rounded-full px-1 py-[2px] mt-2">
                 Last Seen: {formatLastSeen(lastSeen)}
               </span>
             )}
@@ -44,7 +44,7 @@ const Header = ({ token, setToken }) => {
         </NavLink>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex space-x-6 items-center font-medium relative">
+        <nav className="hidden md:flex space-x-3 lg:space-x-6 items-center font-medium relative">
           <NavLink to="/home" className={({ isActive }) => (isActive ? "font-bold underline" : "")}>
             Home
           </NavLink>
@@ -68,7 +68,7 @@ const Header = ({ token, setToken }) => {
           ) : (
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-2 bg-indigo-600 text-left hover:bg-indigo-700 rounded-lg"
+              className="w-full px-3 py-2 bg-indigo-600 text-left hover:bg-indigo-700 rounded-3xl"
             >
               Logout
             </button>
