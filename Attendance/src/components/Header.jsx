@@ -39,7 +39,7 @@ const Header = ({ token, setToken }) => {
                 Last Seen: {formatLastSeen(lastSeen)}
               </span>
             )}
-            <Link to={token ? "/dashboard" : "/login"} className={token ? `text-2xl border px-2 ml-2 rounded-xl` : `hidden`}><i className="fa fa-bar-chart"></i></Link>
+            <Link to={token ? "/dashboard" : "/login"} className={token ? `text-2xl border border-gray-600 px-2 ml-2 rounded-xl` : `hidden`}><i className="fa fa-bar-chart"></i></Link>
           </div>
         </NavLink>
 
@@ -68,7 +68,7 @@ const Header = ({ token, setToken }) => {
           ) : (
             <button
               onClick={handleLogout}
-              className="w-full px-3 py-2 bg-indigo-600 text-left hover:bg-indigo-700 rounded-3xl"
+              className="w-full px-3 py-2 bg-blue-600 cursor-pointer text-left hover:bg-blue-700 rounded-3xl"
             >
               Logout
             </button>
