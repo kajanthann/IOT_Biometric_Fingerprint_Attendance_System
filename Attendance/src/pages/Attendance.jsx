@@ -86,8 +86,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
           }
         });
 
-        const presentCount = dailyAttendance.filter((a) => a.startsWith("P")).length;
-        const percentage = ((presentCount / dailyAttendance.filter(a => a !== "").length) * 100).toFixed(2);
+        const presentCount = dailyAttendance.filter((a) =>
+          a.startsWith("P")
+        ).length;
+        const percentage = (
+          (presentCount / dailyAttendance.filter((a) => a !== "").length) *
+          100
+        ).toFixed(2);
 
         return { ...student, dailyAttendance, percentage };
       })
@@ -116,7 +121,9 @@ const Attendance = ({ day, timeSlots = [] }) => {
         }))
         .filter((d) => d.date >= start && d.date <= end && d.status !== "");
 
-      const presentCount = countInRange.filter((d) => d.status.startsWith("P")).length;
+      const presentCount = countInRange.filter((d) =>
+        d.status.startsWith("P")
+      ).length;
       const totalCount = countInRange.length;
       percentMap[student.id] =
         totalCount === 0 ? 0 : ((presentCount / totalCount) * 100).toFixed(2);
@@ -128,16 +135,20 @@ const Attendance = ({ day, timeSlots = [] }) => {
   return (
     <div className="p-4">
       {/* View Toggle */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2  my-4">
         <button
           onClick={() => setView("summary")}
-          className={`px-4 py-2 rounded ${view === "summary" ? "bg-green-500 text-white" : "bg-gray-200"}`}
+          className={`px-4 py-2 rounded ${
+            view === "summary" ? "bg-green-500 text-white" : "bg-gray-200"
+          }`}
         >
           Summary
         </button>
         <button
           onClick={() => setView("raw")}
-          className={`px-4 py-2 rounded ${view === "raw" ? "bg-blue-500 text-white" : "bg-gray-200"}`}
+          className={`px-4 py-2 rounded ${
+            view === "raw" ? "bg-blue-500 text-white" : "bg-gray-200"
+          }`}
         >
           Raw Logs
         </button>
@@ -145,24 +156,81 @@ const Attendance = ({ day, timeSlots = [] }) => {
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-        <input
-          type="text"
-          placeholder="Search Name/Index..."
-          className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {view === "summary" && (
-          <select
-            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
-            value={attendanceFilter}
-            onChange={(e) => setAttendanceFilter(e.target.value)}
+        <div className="flex gap-4 items-center p-4">
+          <h1 className="text-2xl font-bold hidden  text-left md:block">
+            Attendance
+          </h1>
+          <div className="flex items-center gap-2">
+            <span
+              className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white"
+              onClick={handlePrevMonth}
+            >
+              ←
+            </span>
+            <span>
+              {month}/{year}
+            </span>
+            <span
+              className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white"
+              onClick={handleNextMonth}
+            >
+              →
+            </span>
+          </div>
+          <div className="relative">
+          <div
+            className="cursor-pointer px-3 bg-black text-white font-bold rounded pt-2 border"
+            onClick={() => setShowDatePicker(!showDatePicker)}
           >
-            <option value="all">All</option>
-            <option value="above80">Above 80%</option>
-            <option value="below80">Below 80%</option>
-          </select>
-        )}
+            %
+          </div>
+          {showDatePicker && (
+            <div className="absolute top-[-8px] left-10 bg-white border rounded p-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="border border-gray-300 rounded px-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+                <span>to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="border border-gray-300 rounded px-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+                />
+                <button
+                  className="px-2 py-1 bg-green-500 text-white rounded cursor-pointer"
+                  onClick={calculateCustomPercentage}
+                >
+                  Calculate
+                </button>
+              </div>
+            </div>
+          )}
+          </div>
+        </div>
+        <div className="flex flex-column gap-4">
+          <input
+            type="text"
+            placeholder="Search Name/Index..."
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {view === "summary" && (
+            <select
+              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={attendanceFilter}
+              onChange={(e) => setAttendanceFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="above80">Above 80%</option>
+              <option value="below80">Below 80%</option>
+            </select>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -192,7 +260,10 @@ const Attendance = ({ day, timeSlots = [] }) => {
                 </tr>
               ) : (
                 students.map((s, idx) => (
-                  <tr key={s.fingerprintId || idx} className="hover:bg-gray-100">
+                  <tr
+                    key={s.fingerprintId || idx}
+                    className="hover:bg-gray-100"
+                  >
                     <td className="py-1 px-2 border">{idx + 1}</td>
                     <td className="py-1 px-2 border">{s.name}</td>
                     <td className="py-1 px-2 border">{s.indexNum}</td>
@@ -209,44 +280,34 @@ const Attendance = ({ day, timeSlots = [] }) => {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <div className="flex gap-2 items-center p-4">
-            <h1 className="text-2xl font-bold">Attendance</h1>
-            <div className="flex items-center gap-2">
-              <span className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white" onClick={handlePrevMonth}>←</span>
-              <span>{month}/{year}</span>
-              <span className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white" onClick={handleNextMonth}>→</span>
-            </div>
-          </div>
-          
           <table className="min-w-full border text-center">
-            <thead className="bg-green-600 text-white sticky top-0">
+            <thead className="bg-slate-100 sticky top-0">
               <tr>
                 <th className="py-1 px-2 border">#</th>
                 <th className="py-1 px-2 border">Name</th>
                 <th className="py-1 px-2 border">Index</th>
                 {monthDays.map((day, idx) => (
                   <th key={idx} className="py-1 px-2 border text-xs">
-                    {day.dayName}<br />{day.date.getDate()}
+                    {day.dayName}
+                    <br />
+                    {day.date.getDate()}
                   </th>
                 ))}
-                <th className="py-2 px-2 border bg-blue-500 relative">
-                  <div className="cursor-pointer" onClick={() => setShowDatePicker(!showDatePicker)}>%</div>
-                  {showDatePicker && (
-                    <div className="absolute bg-white border p-2 rounded shadow-lg z-10 top-10 left-[-155px] flex flex-col gap-2">
-                      <input type="date" className="border text-xs rounded px-1 py-1" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                      <input type="date" className="border text-xs rounded px-1 py-1" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-                      <div className="flex justify-between gap-2">
-                        <button className="bg-green-500 text-white px-2 py-1 rounded" onClick={calculateCustomPercentage}>Calculate</button>
-                        <button className="bg-blue-500 text-white px-2 py-1 rounded" onClick={() => setShowDatePicker(false)}>X</button>
-                      </div>
-                    </div>
-                  )}
+                <th className="py-2 px-2 border bg-blue-500">
+                  <div
+                    className="cursor-pointer"
+                  >
+                    %
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody>
               {groupedStudents().map((student, idx) => (
-                <tr key={student.fingerprintId || idx} className="hover:bg-gray-100">
+                <tr
+                  key={student.fingerprintId || idx}
+                  className="hover:bg-gray-100"
+                >
                   <td className="py-1 px-2 border">{idx + 1}</td>
                   <td className="py-1 px-2 border">{student.name}</td>
                   <td className="py-1 px-2 border">{student.indexNum}</td>
@@ -254,13 +315,44 @@ const Attendance = ({ day, timeSlots = [] }) => {
                     const cellKey = `${student.id}-${dIdx}`;
                     const showTime = showTimesMap[cellKey] || false;
                     return (
-                      <td key={dIdx} className={`py-1 px-2 border font-bold ${att.startsWith("P") ? "bg-green-200 cursor-pointer" : att === "A" ? "bg-red-200 text-red-500" : ""}`}
-                          onClick={() => { if(att.startsWith("P")) { setShowTimesMap(prev => ({...prev, [cellKey]: !prev[cellKey]})) } }}>
-                        {att.startsWith("P") ? <>P {showTime && <span className="text-[10px] font-normal">({att.slice(3,-1)})</span>}</> : att === "A" ? "A" : ""}
+                      <td
+                        key={dIdx}
+                        className={`py-1 px-2 border font-bold ${
+                          att.startsWith("P")
+                            ? "bg-green-200 cursor-pointer"
+                            : att === "A"
+                            ? "bg-red-50/70 text-red-600"
+                            : ""
+                        }`}
+                        onClick={() => {
+                          if (att.startsWith("P")) {
+                            setShowTimesMap((prev) => ({
+                              ...prev,
+                              [cellKey]: !prev[cellKey],
+                            }));
+                          }
+                        }}
+                      >
+                        {att.startsWith("P") ? (
+                          <>
+                            P{" "}
+                            {showTime && (
+                              <span className="text-[10px] font-normal">
+                                ({att.slice(3, -1)})
+                              </span>
+                            )}
+                          </>
+                        ) : att === "A" ? (
+                          "A"
+                        ) : (
+                          ""
+                        )}
                       </td>
                     );
                   })}
-                  <td className="py-2 px-2 border font-bold">{customPercent[student.id] ?? student.percentage}%</td>
+                  <td className="py-2 px-2 border font-bold">
+                    {customPercent[student.id] ?? student.percentage}%
+                  </td>
                 </tr>
               ))}
             </tbody>

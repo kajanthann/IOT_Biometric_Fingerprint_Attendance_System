@@ -1,8 +1,8 @@
 import React, { useContext, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { AppContext } from "../context/AppContext";
 
-const Header = ({ token, setToken, adminEmail }) => {
+const Header = ({ token, setToken }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { espStatus, lastSeen } = useContext(AppContext);
 
@@ -19,7 +19,7 @@ const Header = ({ token, setToken, adminEmail }) => {
 
   return (
     <header className="bg-[#02c986] text-white">
-      <div className="flex justify-between items-center p-4 mx-auto">
+      <div className="flex justify-between items-center px-4 py-3 mx-auto">
         {/* Logo */}
         <NavLink to={"/home"}>
           <div className="text-4xl flex items-center cursor-pointer relative">
@@ -27,18 +27,19 @@ const Header = ({ token, setToken, adminEmail }) => {
             <span className="text-black text-xs ml-[-12px] mt-[2px] align-middle">Attendance</span>
 
             {/* LED Status */}
-            <span
-              className={`w-3.5 h-3.5 border-2 rounded-full ml-[-7px] mt-[-20px] align-middle ${
-                espStatus === "ONLINE" ? "bg-green-400 animate-pulse" : "bg-red-500"
+            {token && <span
+              className={`w-3.5 h-3.5 border-2 rounded-full ml-2 mt-2 align-middle ${
+                espStatus === "ONLINE" ? "bg-[#00ff88] animate-pulse" : "bg-[#ff5c5c]"
               }`}
-            ></span>
+            ></span>}
 
             {/* Last Seen */}
-            {espStatus === "OFFLINE" && lastSeen && (
-              <span className="text-[10px] text-black ml-2 mt-[-20px]">
+            {token && espStatus === "OFFLINE" && lastSeen && (
+              <span className="text-[10px] text-black ml-1 bg-[#e0f9f0] rounded-full px-1 py-[2px] mt-2">
                 Last Seen: {formatLastSeen(lastSeen)}
               </span>
             )}
+            <Link to={token ? "/dashboard" : "/login"} className={token ? `text-2xl border px-2 ml-2 rounded-xl` : `hidden`}><i className="fa fa-bar-chart"></i></Link>
           </div>
         </NavLink>
 
