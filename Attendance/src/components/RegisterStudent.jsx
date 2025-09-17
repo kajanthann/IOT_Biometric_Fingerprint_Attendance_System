@@ -7,6 +7,7 @@ const RegisterStudent = () => {
   const [name, setName] = useState("");
   const [regNum, setRegNum] = useState("");
   const [indexNum, setIndexNum] = useState("");
+  const [email, setEmail] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const { espStatus } = useContext(AppContext);
@@ -35,7 +36,7 @@ const RegisterStudent = () => {
   }, []);
 
   const startEnroll = async () => {
-    if (!name || !regNum || !indexNum) {
+    if (!name || !regNum || !indexNum || !email) {
       alert("Please fill all fields!");
       return;
     }
@@ -43,7 +44,7 @@ const RegisterStudent = () => {
     setMessages([]); // Clear previous messages
 
     try {
-      await set(ref(database, "/enrollData"), { name, regNum, indexNum });
+      await set(ref(database, "/enrollData"), { name, regNum, indexNum, email });
       await set(ref(database, "/systemState"), "ENROLL");
 
       // Don't clear input fields yet — wait until enrollment finishes
@@ -83,6 +84,14 @@ const RegisterStudent = () => {
             placeholder="IndexNum"
             value={indexNum}
             onChange={(e) => setIndexNum(e.target.value)}
+            className="border p-2 my-2 w-full"
+            disabled={loading}
+          />
+          <input
+            type="email"
+            placeholder="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="border p-2 my-2 w-full"
             disabled={loading}
           />

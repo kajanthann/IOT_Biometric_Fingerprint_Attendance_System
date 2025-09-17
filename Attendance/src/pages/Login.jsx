@@ -93,7 +93,7 @@ const Login = ({ setToken, setAdminEmail }) => {  // Added setAdminEmail
               className={`w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white transition-all duration-200 ${
                 loading
                   ? "bg-indigo-300 cursor-not-allowed"
-                  : "bg-[#02c986] hover:bg-[#029c72] focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  : "bg-[#02c986] hover:bg-[#029c72] focus:ring-2 focus:ring-green-300 focus:ring-offset-2"
               }`}
             >
               {loading ? "Signing in..." : "Sign in"}

@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import heroImg from "../assets/hero2.png";
+import Hero from "../components/Hero";
 
 const Home = ({ token }) => {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ const Home = ({ token }) => {
       {/* Hero Section */}
       <header className="flex flex-col lg:flex-row rounded-3xl items-center justify-between bg-[#8ef4cc]">
         {/* Left: Title + Emojis Flow */}
-        <div className="lg:w-1/2 text-center md:text-left px-4 md:px-20 py-12">
+        <div className="lg:w-1/2 text-center md:text-left px-4 md:px-20">
           <h1 className="text-3xl md:text-5xl text-[#01996f] font-bold">
             Smart Attendance System
           </h1>
@@ -20,7 +21,7 @@ const Home = ({ token }) => {
           </p>
 
           {/* Emoji Process Visualization */}
-          <div className="mt-5 lg:mt-8 space-y-2 text-left md:text-xl font-medium text-gray-700">
+          <div className="my-5 lg:mt-8 space-y-2 text-left md:text-xl font-medium text-gray-700">
             <p className="ml-5">
               → 👆🖐️  <span className="ml-2">Scan Fingerprint</span>
             </p>
@@ -73,6 +74,8 @@ const Home = ({ token }) => {
           </div>
         </div>
       </section>
+
+      <Hero />
 
       {/* System Overview Section */}
       <section className="py-20 px-4 md:px-20 bg-green-100">

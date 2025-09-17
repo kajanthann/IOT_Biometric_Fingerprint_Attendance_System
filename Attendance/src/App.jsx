@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Route, Routes, Navigate } from "react-router-dom";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
-import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
 import Attendance from "./pages/Attendance";
 import TimeTable from "./pages/TimeTable";
@@ -32,17 +31,7 @@ const App = () => {
       <Header token={token} setToken={setToken} adminEmail={adminEmail} />
       <div className="flex-1">
         <Routes>
-          {/* Protected Dashboard */}
-          <Route
-            path="/dashboard"
-            element={
-              token && adminEmail === ADMIN_EMAIL ? (
-                <Dashboard token={token} />
-              ) : (
-                <Navigate to="/login" />
-              )
-            }
-          />
+          
 
           {/* Login */}
           <Route
@@ -51,7 +40,7 @@ const App = () => {
               !token ? (
                 <Login setToken={setToken} setAdminEmail={setAdminEmail} />
               ) : (
-                <Navigate to="/dashboard" />
+                <Navigate to="/home" />
               )
             }
           />
@@ -65,7 +54,7 @@ const App = () => {
           <Route path="/modules/:moduleName" element={<ModuleDetails />} />
 
           {/* Default redirect */}
-          <Route path="*" element={<Navigate to={token ? "/dashboard" : "/login"} />} />
+          <Route path="*" element={<Navigate to={"/home"} />} />
         </Routes>
       </div>
       <Footer />
