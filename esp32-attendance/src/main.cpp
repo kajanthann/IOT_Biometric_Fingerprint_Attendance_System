@@ -8,44 +8,51 @@
 #include <addons/RTDBHelper.h>
 #include "time.h"
 #include "secrets.h"
+#include <EEPROM.h>
 
-// --- OLED setup ---
+// ---------------- OLED setup ----------------
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 128
 Adafruit_SH1107 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
-// --- ESP32 UART for AS608 ---
+// ---------------- ESP32 UART for AS608 ----------------
 HardwareSerial mySerial(1);
 #define RX_PIN 18
 #define TX_PIN 19
 Adafruit_Fingerprint finger(&mySerial);
 
-// --- LED pins ---
+// ---------------- LED pins ----------------
 #define GREEN_LED 2
 #define RED_LED 4
 
+// ---------------- EEPROM settings ----------------
+#define EEPROM_SIZE 1024 // Adjust according to max students
+#define MAX_STUDENTS 50
+#define STUDENT_SIZE 64 // Approx bytes per student record
 
+// ---------------- Firebase ----------------
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
+// ---------------- Student structure ----------------
 struct Student {
   uint8_t id;
-  String name;
-  String regNum;
-  String indexNum;
+  char name[20];
+  char regNum[15];
+  char indexNum[15];
+  char email[15];
 };
-Student students[50];
-uint8_t studentCount = 0;
 
+Student students[MAX_STUDENTS];
+uint8_t studentCount = 0;
 bool firebaseReady = false;
 
-// System states
+// ---------------- System states ----------------
 enum SystemState { VERIFY, ENROLL };
 SystemState currentState = VERIFY;
 
-
-// NTP settings
+// ---------------- NTP ----------------
 const char *ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 19800;  // GMT+5:30
 const int daylightOffset_sec = 0;
@@ -57,9 +64,11 @@ void enrollFinger(FirebaseJson &enrollDataJson);
 void verifyFingerNonBlocking();
 bool writeFirebase(String path, FirebaseJson &json);
 String getTimestamp();
-bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &indexNum);
+bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &indexNum, String &email);
 void reconnectWiFi();
 void reconnectFirebase();
+void saveStudentsToEEPROM();
+void loadStudentsFromEEPROM();
 
 // ---------------- Setup ----------------
 void setup() {
@@ -70,6 +79,10 @@ void setup() {
   pinMode(RED_LED, OUTPUT);
   digitalWrite(GREEN_LED, LOW);
   digitalWrite(RED_LED, LOW);
+
+  // Initialize EEPROM
+  EEPROM.begin(EEPROM_SIZE);
+  loadStudentsFromEEPROM();
 
   // Initialize OLED
   Wire.begin(21, 22);
@@ -127,10 +140,8 @@ void setup() {
 unsigned long lastHeartbeat = 0;
 
 void loop() {
-  // Auto-reconnect checks
-  if (WiFi.status() != WL_CONNECTED) {
-    reconnectWiFi();
-  }
+  // Auto-reconnect
+  if (WiFi.status() != WL_CONNECTED) reconnectWiFi();
   if (!Firebase.ready()) {
     firebaseReady = false;
     reconnectFirebase();
@@ -140,41 +151,30 @@ void loop() {
 
   // Heartbeat every 10s
   if (firebaseReady && millis() - lastHeartbeat > 10000) {
-    String isoTime = getTimestamp();
-    Firebase.RTDB.setString(&fbdo, "/status", isoTime);
+    Firebase.RTDB.setString(&fbdo, "/status", getTimestamp());
     lastHeartbeat = millis();
   }
 
   if (!firebaseReady) return;
 
-  // Read system state from Firebase
+  // Get system state from Firebase
   String state = "";
-  if (Firebase.RTDB.getString(&fbdo, "/systemState")) {
-    state = fbdo.stringData();
-  }
+  if (Firebase.RTDB.getString(&fbdo, "/systemState")) state = fbdo.stringData();
 
-  // If enrollment requested from frontend
+  // Enrollment
   if (state == "ENROLL" && currentState != ENROLL) {
     currentState = ENROLL;
-
     FirebaseJson enrollJson;
-    if (Firebase.RTDB.getJSON(&fbdo, "/enrollData")) {
-      enrollJson = fbdo.jsonObject();
-    }
-
+    if (Firebase.RTDB.getJSON(&fbdo, "/enrollData")) enrollJson = fbdo.jsonObject();
     oledMsg("Enrollment Started...", 0, true);
     enrollFinger(enrollJson);
-
-    // After enrollment, revert to VERIFY
     Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
     currentState = VERIFY;
     oledIdle();
   }
 
-  // Non-blocking verification
-  if (state == "VERIFY" && currentState == VERIFY) {
-    verifyFingerNonBlocking();
-  }
+  // Verification
+  if (state == "VERIFY" && currentState == VERIFY) verifyFingerNonBlocking();
 
   delay(50);
 }
@@ -212,32 +212,32 @@ String getTimestamp() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return "Unknown";
   char buffer[30];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &timeinfo); // ISO format
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &timeinfo); // ISO
   return String(buffer);
 }
 
 // ---------------- Read enrollment data ----------------
-bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &indexNum) {
+bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &indexNum, String &email) {
   FirebaseJsonData jsonData;
-  if (!json.get(jsonData, "name")) return false;
-  name = jsonData.stringValue;
-  if (!json.get(jsonData, "regNum")) return false;
-  regNum = jsonData.stringValue;
-  if (!json.get(jsonData, "indexNum")) return false;
-  indexNum = jsonData.stringValue;
+  if (!json.get(jsonData, "name")) return false; name = jsonData.stringValue;
+  if (!json.get(jsonData, "regNum")) return false; regNum = jsonData.stringValue;
+  if (!json.get(jsonData, "indexNum")) return false; indexNum = jsonData.stringValue;
+  if (!json.get(jsonData, "email")) return false; email = jsonData.stringValue;
   return true;
 }
 
 // ---------------- Enrollment ----------------
 void enrollFinger(FirebaseJson &enrollDataJson) {
-  if (studentCount >= 50) {
+  if (studentCount >= MAX_STUDENTS) {
     oledMsg("Max students!", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
-  String name, regNum, indexNum;
-  if (!readEnrollData(enrollDataJson, name, regNum, indexNum)) {
+  String name, regNum, indexNum, email;
+  if (!readEnrollData(enrollDataJson, name, regNum, indexNum, email)) {
     oledMsg("Invalid data!", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
@@ -251,18 +251,19 @@ void enrollFinger(FirebaseJson &enrollDataJson) {
   }
   if (finger.image2Tz(1) != FINGERPRINT_OK) {
     oledMsg("Image fail", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   p = finger.fingerSearch();
   if (p == FINGERPRINT_OK) {
     oledMsg("Already Enrolled!", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     if (firebaseReady) Firebase.RTDB.deleteNode(&fbdo, "/messages");
     return;
   }
 
-  oledMsg("Remove finger", 0, true);
-  delay(2000);
+  oledMsg("Remove finger", 0, true); delay(2000);
   while (finger.getImage() != FINGERPRINT_NOFINGER);
 
   oledMsg("Place again...", 0, true);
@@ -272,25 +273,31 @@ void enrollFinger(FirebaseJson &enrollDataJson) {
   }
   if (finger.image2Tz(2) != FINGERPRINT_OK) {
     oledMsg("2nd fail", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   if (finger.createModel() != FINGERPRINT_OK) {
     oledMsg("Model fail", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
   if (finger.storeModel(id) != FINGERPRINT_OK) {
     oledMsg("Store fail", 0, true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   students[studentCount].id = id;
-  students[studentCount].name = name;
-  students[studentCount].regNum = regNum;
-  students[studentCount].indexNum = indexNum;
+  name.toCharArray(students[studentCount].name, 20);
+  regNum.toCharArray(students[studentCount].regNum, 15);
+  indexNum.toCharArray(students[studentCount].indexNum, 15);
+  email.toCharArray(students[studentCount].email, 15);
   studentCount++;
+  saveStudentsToEEPROM();
 
   oledMsg("Enroll Success: " + name, 0, true);
+  digitalWrite(GREEN_LED, HIGH); delay(1000); digitalWrite(GREEN_LED, LOW);
 
   if (firebaseReady) {
     Firebase.RTDB.deleteNode(&fbdo, "/messages");
@@ -300,6 +307,7 @@ void enrollFinger(FirebaseJson &enrollDataJson) {
     json.set("name", name);
     json.set("regNum", regNum);
     json.set("indexNum", indexNum);
+    json.set("email", email);
     writeFirebase(path, json);
   }
 }
@@ -309,41 +317,41 @@ void verifyFingerNonBlocking() {
   static unsigned long lastCheck = 0;
   static bool showingMsg = false;
 
-  if (millis() - lastCheck < 200) return; // check every 200ms
+  if (millis() - lastCheck < 200) return;
   lastCheck = millis();
 
   int p = finger.getImage();
   if (p == FINGERPRINT_NOFINGER) {
-    if (!showingMsg) {
-      oledMsg("Place finger...", 0);
-      showingMsg = true;
-    }
+    if (!showingMsg) { oledMsg("Place finger...", 0); showingMsg = true; }
     return;
   } else if (p != FINGERPRINT_OK) {
     oledMsg("Image error!", 0);
+    digitalWrite(RED_LED, HIGH); delay(500); digitalWrite(RED_LED, LOW);
     showingMsg = false;
     return;
   }
-
   showingMsg = false;
 
   if (finger.image2Tz(1) != FINGERPRINT_OK) {
     oledMsg("Image conv fail", 0);
+    digitalWrite(RED_LED, HIGH); delay(500); digitalWrite(RED_LED, LOW);
     return;
   }
 
   if (finger.fingerFastSearch() == FINGERPRINT_OK) {
     uint8_t id = finger.fingerID;
-    String name = "Unknown", regNum = "", indexNum = "";
+    String name = "Unknown", regNum = "", indexNum = "", email = "";
     for (uint8_t i = 0; i < studentCount; i++) {
       if (students[i].id == id) {
-        name = students[i].name;
-        regNum = students[i].regNum;
-        indexNum = students[i].indexNum;
+        name = String(students[i].name);
+        regNum = String(students[i].regNum);
+        indexNum = String(students[i].indexNum);
+        email = String(students[i].email);
       }
     }
 
     oledMsg("Welcome: " + name, 0);
+    digitalWrite(GREEN_LED, HIGH); delay(500); digitalWrite(GREEN_LED, LOW);
 
     if (firebaseReady) {
       String path = "/attendance/" + String(id) + "_" + String(millis());
@@ -352,11 +360,13 @@ void verifyFingerNonBlocking() {
       json.set("name", name);
       json.set("regNum", regNum);
       json.set("indexNum", indexNum);
+      json.set("email", email);
       json.set("timestamp", getTimestamp());
       writeFirebase(path, json);
     }
   } else {
     oledMsg("No Match!", 0);
+    digitalWrite(RED_LED, HIGH); delay(500); digitalWrite(RED_LED, LOW);
   }
 }
 
@@ -366,18 +376,13 @@ void reconnectWiFi() {
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
-    delay(500);
-    Serial.print(".");
-  }
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) { delay(500); Serial.print("."); }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nWi-Fi Reconnected!");
-    digitalWrite(GREEN_LED, HIGH);
-    digitalWrite(RED_LED, LOW);
+    digitalWrite(GREEN_LED, HIGH); digitalWrite(RED_LED, LOW);
   } else {
     Serial.println("\nWi-Fi Failed!");
-    digitalWrite(RED_LED, HIGH);
-    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(RED_LED, HIGH); digitalWrite(GREEN_LED, LOW);
   }
 }
 
@@ -385,4 +390,32 @@ void reconnectFirebase() {
   Serial.println("Reconnecting Firebase...");
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+}
+
+// ---------------- EEPROM Functions ----------------
+void saveStudentsToEEPROM() {
+  EEPROM.write(0, studentCount);
+  int addr = 1;
+  for (int i = 0; i < studentCount; i++) {
+    EEPROM.write(addr++, students[i].id);
+    for (int j = 0; j < 20; j++) EEPROM.write(addr++, students[i].name[j]);
+    for (int j = 0; j < 15; j++) EEPROM.write(addr++, students[i].regNum[j]);
+    for (int j = 0; j < 15; j++) EEPROM.write(addr++, students[i].indexNum[j]);
+    for (int j = 0; j < 15; j++) EEPROM.write(addr++, students[i].email[j]);
+  }
+  EEPROM.commit();
+}
+
+void loadStudentsFromEEPROM() {
+  studentCount = EEPROM.read(0);
+  if (studentCount > MAX_STUDENTS) studentCount = 0;
+  int addr = 1;
+  for (int i = 0; i < studentCount; i++) {
+    students[i].id = EEPROM.read(addr++);
+    for (int j = 0; j < 20; j++) students[i].name[j] = EEPROM.read(addr++);
+    for (int j = 0; j < 15; j++) students[i].regNum[j] = EEPROM.read(addr++);
+    for (int j = 0; j < 15; j++) students[i].indexNum[j] = EEPROM.read(addr++);
+    for (int j = 0; j < 15; j++) students[i].email[j] = EEPROM.read(addr++);
+  }
+  Serial.println("Loaded " + String(studentCount) + " students from EEPROM");
 }
