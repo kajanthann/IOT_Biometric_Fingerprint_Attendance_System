@@ -8,5 +8,5 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base:"/IOT_Biometric_Fingerprint_Attendance_System"
+  base:"/IOT_Biometric_Fingerprint_Attendance_System/"
 })

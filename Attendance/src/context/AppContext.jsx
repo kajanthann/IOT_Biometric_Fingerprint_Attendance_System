@@ -14,21 +14,27 @@ const AppContextProvider = ({ children }) => {
   const [espStatus, setEspStatus] = useState("OFFLINE"); // NEW: ESP32 status
   const [lastSeen, setLastSeen] = useState(null); // NEW: lastSeen timestamp
 
-  const ADMIN_EMAIL = "smarfingeriot32@gmail.com";
+  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
+  const csvUrl = import.meta.env.VITE_GOOGLESHEET;
 
-  const csvUrl =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vQw3N9IWLeLtfrevd9rwZzzJHJYw8RD48iHKdmxgsK9MnFnEnRUYF683S9G_m62UXYKOYOmDBHf5M-k/pub?output=csv";
+
 
   // ✅ --- CSV FETCH ---
   const fetchCSV = (callback, header = true) => {
-    Papa.parse(csvUrl, {
-      download: true,
-      header,
-      skipEmptyLines: true,
-      complete: callback,
-      error: (err) => console.error("CSV Error:", err),
-    });
-  };
+  if (!csvUrl) {
+    console.error("CSV URL is undefined!");
+    return;
+  }
+
+  Papa.parse(csvUrl, {
+    download: true,
+    header,
+    skipEmptyLines: true,
+    complete: callback,
+    error: (err) => console.error("CSV Error:", err),
+  });
+};
+
 
   // ✅ --- MODULE FETCH ---
   const fetchModules = () => {
