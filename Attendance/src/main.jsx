@@ -6,9 +6,11 @@ import { BrowserRouter } from "react-router-dom";
 import AppContextProvider from "./context/AppContext.jsx";
 
 createRoot(document.getElementById("root")).render(
-  <BrowserRouter>
-    <AppContextProvider>
-      <App />
-    </AppContextProvider>
-  </BrowserRouter>
+  <StrictMode>
+    <BrowserRouter basename="/IOT_Biometric_Fingerprint_Attendance_System/">
+      <AppContextProvider>
+        <App />
+      </AppContextProvider>
+    </BrowserRouter>
+  </StrictMode>
 );
