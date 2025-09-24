@@ -22,7 +22,7 @@ const ModuleCards = () => {
   ];
 
   return (
-    <div className="container mx-auto p-6 mb-5">
+    <div className="container mx-auto p-6 md:px-15 mb-5">
       <h1 className="text-3xl font-bold mb-6 text-center">Modules List</h1>
       {loading ? (
         <div className="flex justify-center items-center min-h-[300px]">

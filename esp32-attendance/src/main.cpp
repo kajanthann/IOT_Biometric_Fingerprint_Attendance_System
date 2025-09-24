@@ -156,7 +156,7 @@ void loop() {
     firebaseReady = true;
   }
 
-  if (firebaseReady && millis() - lastHeartbeat > 10000) {
+  if (firebaseReady && millis() - lastHeartbeat > 2000) {
     Firebase.RTDB.setString(&fbdo, "/status", getTimestamp());
     lastHeartbeat = millis();
   }
@@ -177,6 +177,7 @@ void loop() {
     // Short success message before switching back to VERIFY
     oledBottom("Enrollment Complete!", 0, true);
     delay(1500);
+    Firebase.RTDB.deleteNode(&fbdo, "/messages");
 
     Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
     currentState = VERIFY;

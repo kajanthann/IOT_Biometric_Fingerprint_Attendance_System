@@ -7,12 +7,12 @@ const Home = ({ token }) => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex flex-col p-3 md:p-15">
+    <div className="min-h-screen flex flex-col p-5 md:p-15">
       {/* Hero Section */}
       <header className="flex flex-col lg:flex-row rounded-3xl items-center justify-between bg-[#8ef4cc]">
         {/* Left: Title + Emojis Flow */}
         <div className="lg:w-1/2 text-center md:text-left px-4 md:px-20">
-          <h1 className="text-3xl md:text-5xl text-[#01996f] font-bold">
+          <h1 className="text-3xl mt-3 md:text-5xl text-[#01996f] font-bold">
             Smart Attendance System
           </h1>
           <p className="text md:text-xl my-5">
@@ -21,7 +21,7 @@ const Home = ({ token }) => {
           </p>
 
           {/* Emoji Process Visualization */}
-          <div className="my-5 lg:mt-8 space-y-2 text-left md:text-xl font-medium text-gray-700">
+          <div className="my-5 lg:mt-8 space-y-2 text-left text-sm md:text-xl font-medium text-gray-700">
             <p className="ml-5">
               → 👆🖐️  <span className="ml-2">Scan Fingerprint</span>
             </p>
@@ -42,7 +42,7 @@ const Home = ({ token }) => {
 
         {/* Right: Hero Image */}
         <div className="lg:w-1/2">
-          <img src={heroImg} alt="Hero" className="w-full md:rounded-r-3xl" />
+          <img src={heroImg} alt="Hero" className="w-full rounded-b-3xl lg:rounded-b-none md:rounded-r-3xl" />
         </div>
       </header>
 
@@ -75,7 +75,7 @@ const Home = ({ token }) => {
         </div>
       </section>
 
-      <Hero />
+      
 
       {/* System Overview Section */}
       <section className="py-20 px-4 md:px-20 bg-green-100">
@@ -102,6 +102,8 @@ const Home = ({ token }) => {
           </div>
         </div>
       </section>
+
+      <Hero />
     </div>
   );
 };

@@ -16,7 +16,7 @@ const Students = ({ token, adminEmail }) => {
   };
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="p-7 md:px-15">
       <div className="flex flex-column justify-between items-center mt-4 mb-6">
         <h2 className="text-2xl font-bold my-4 md:mb-0">Student Details</h2>
         <div>
@@ -27,7 +27,7 @@ const Students = ({ token, adminEmail }) => {
               className="flex items-center gap-2 px-4 md:px-5 py-2.5 bg-[#01996f] text-white font-medium rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg transition-all duration-200"
             >
               <i className="fa fa-user-plus"></i>
-              <span>Reg Student</span>
+              <span className="hidden md:inline">Reg Student</span>
             </button>
           )}
         </div>

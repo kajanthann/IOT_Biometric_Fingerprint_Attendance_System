@@ -31,10 +31,10 @@ const ModuleDetails = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-5 py-8">
       {/* Module Name */}
       <div className="bg-gradient-to-r from-[#02c986] to-[#3bb8ff] text-white rounded-2xl shadow-lg py-6 px-4 text-center mb-10">
-        <h1 className="text-3xl md:text-4xl font-bold">{moduleName}</h1>
+        <h1 className="text-lg md:text-4xl font-bold">{moduleName}</h1>
         {/* Schedule */}
         {moduleData.length > 0 && (
           <div className=" flex gap-3 mt-4">
@@ -56,8 +56,8 @@ const ModuleDetails = () => {
       </div>
 
       {/* Attendance */}
-      <div className="bg-white shadow-md rounded-xl p-6">
-        <h2 className="text-xl md:text-2xl font-semibold text-gray-700 mb-4">
+      <div className="bg-white shadow-md rounded-xl p-3">
+        <h2 className="text-xl md:text-2xl font-semibold text-gray-700 mb-2">
           Attendance
         </h2>
         <Attendance day={day} timeSlots={timeSlots} />

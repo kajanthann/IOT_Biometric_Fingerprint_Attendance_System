@@ -133,12 +133,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
   };
 
   return (
-    <div className="p-4">
+    <div className="px-8 md:px-15">
       {/* View Toggle */}
-      <div className="flex gap-2  my-4">
-        <button
+      <div className="flex flex-column sm:flex-row justify-between gap-2 my-7">
+        <div className="flex gap-2">
+          <button
           onClick={() => setView("summary")}
-          className={`px-4 py-2 rounded ${
+          className={`px-4 py-2 rounded text-sm sm:text-base ${
             view === "summary" ? "bg-green-500 text-white" : "bg-gray-200"
           }`}
         >
@@ -146,82 +147,83 @@ const Attendance = ({ day, timeSlots = [] }) => {
         </button>
         <button
           onClick={() => setView("raw")}
-          className={`px-4 py-2 rounded ${
+          className={`px-4 py-2 rounded text-sm sm:text-base ${
             view === "raw" ? "bg-blue-500 text-white" : "bg-gray-200"
           }`}
         >
           Raw Logs
         </button>
+        </div>
+        
+        <div className="relative">
+            <div
+              className="cursor-pointer px-3 bg-black text-white font-bold rounded p-1 border text-sm sm:text-base"
+              onClick={() => setShowDatePicker(!showDatePicker)}
+            >
+              %
+            </div>
+            {showDatePicker && (
+              <div className="absolute top-10 md:top-[50px] right-0 md:right-[00px] bg-white border rounded p-2 z-50">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm sm:text-base"
+                  />
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm sm:text-base"
+                  />
+                  <button
+                    className="px-2 py-1 bg-green-500 text-white rounded text-sm sm:text-base"
+                    onClick={calculateCustomPercentage}
+                  >
+                    Calculate
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-        <div className="flex gap-4 items-center p-4">
-          <h1 className="text-2xl font-bold">
-            Attendance
-          </h1>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-2 w-full md:w-auto">
+          <h1 className="text-xl sm:text-2xl font-bold">Attendance</h1>
           <div className="flex items-center gap-2">
             <span
-              className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white"
+              className="cursor-pointer border px-2 py-1 hover:bg-black hover:text-white rounded text-sm sm:text-base"
               onClick={handlePrevMonth}
             >
               ←
             </span>
-            <span>
+            <span className="text-sm sm:text-base">
               {month}/{year}
             </span>
             <span
-              className="cursor-pointer border text-xl px-2 hover:bg-black hover:text-white"
+              className="cursor-pointer border px-2 py-1 hover:bg-black hover:text-white rounded text-sm sm:text-base"
               onClick={handleNextMonth}
             >
               →
             </span>
           </div>
-          <div className="relative">
-          <div
-            className="cursor-pointer px-3 bg-black text-white font-bold rounded p-1 border"
-            onClick={() => setShowDatePicker(!showDatePicker)}
-          >
-            %
-          </div>
-          {showDatePicker && (
-            <div className="absolute md:top-[-60px] top-[-10px] left-[-300px] md:left-[-100px] bg-white border rounded p-2">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="border border-gray-300 rounded px-2 focus:outline-none focus:ring-2 focus:ring-green-400"
-                />
-                <span></span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="border border-gray-300 rounded px-2 focus:outline-none focus:ring-2 focus:ring-green-400"
-                />
-                <button
-                  className="px-2 py-1 bg-green-500 text-white rounded cursor-pointer"
-                  onClick={calculateCustomPercentage}
-                >
-                  Calculate
-                </button>
-              </div>
-            </div>
-          )}
-          </div>
+          
         </div>
-        <div className="flex flex-column gap-4">
+
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full md:w-auto">
           <input
             type="text"
             placeholder="Search Name/Index..."
-            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 flex-1 text-sm sm:text-base"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           {view === "summary" && (
             <select
-              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400"
+              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 text-sm sm:text-base"
               value={attendanceFilter}
               onChange={(e) => setAttendanceFilter(e.target.value)}
             >
@@ -233,132 +235,83 @@ const Attendance = ({ day, timeSlots = [] }) => {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center min-h-[200px]">
-          <div
-            className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4"
-            style={{ color: "#02c986" }}
-          />
-        </div>
-      ) : view === "raw" ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border text-center">
-            <thead className="bg-blue-600 text-white sticky top-0">
-              <tr>
-                <th className="py-1 px-2 border">#</th>
-                <th className="py-1 px-2 border">Name</th>
-                <th className="py-1 px-2 border">Index</th>
-                <th className="py-1 px-2 border">Timestamps</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="py-4 text-gray-500 italic">
-                    No attendance found.
-                  </td>
-                </tr>
-              ) : (
-                students.map((s, idx) => (
-                  <tr
-                    key={s.fingerprintId || idx}
-                    className="hover:bg-gray-100"
-                  >
-                    <td className="py-1 px-2 border">{idx + 1}</td>
-                    <td className="py-1 px-2 border">{s.name}</td>
-                    <td className="py-1 px-2 border">{s.indexNum}</td>
-                    <td className="py-1 px-2 border text-left">
-                      {s.timestamps.filter(Boolean).map((ts, i) => (
-                        <div key={i}>{new Date(ts).toLocaleString()}</div>
-                      ))}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border text-center">
-            <thead className="bg-slate-100 sticky top-0">
-              <tr>
-                <th className="py-1 px-2 border">#</th>
-                <th className="py-1 px-2 border">Name</th>
-                <th className="py-1 px-2 border">Index</th>
-                {monthDays.map((day, idx) => (
-                  <th key={idx} className="py-1 px-2 border text-xs">
-                    {day.dayName}
-                    <br />
-                    {day.date.getDate()}
-                  </th>
-                ))}
-                <th className="py-2 px-2 border bg-blue-500">
-                  <div
-                    className="cursor-pointer"
-                  >
-                    %
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupedStudents().map((student, idx) => (
-                <tr
-                  key={student.fingerprintId || idx}
-                  className="hover:bg-gray-100"
+      {/* Table */}
+      <div className="overflow-x-auto w-full">
+        <table className="min-w-full border text-center text-xs sm:text-sm">
+          <thead className="bg-slate-100 sticky top-0">
+            <tr>
+              <th className="py-1 px-2 border">#</th>
+              <th className="py-1 px-2 border">Name</th>
+              <th className="py-1 px-2 border">Index</th>
+              {monthDays.map((day, idx) => (
+                <th
+                  key={idx}
+                  className="py-1 px-1 sm:px-2 border text-[10px] sm:text-xs"
                 >
-                  <td className="py-1 px-2 border">{idx + 1}</td>
-                  <td className="py-1 px-2 border">{student.name}</td>
-                  <td className="py-1 px-2 border">{student.indexNum}</td>
-                  {student.dailyAttendance.map((att, dIdx) => {
-                    const cellKey = `${student.id}-${dIdx}`;
-                    const showTime = showTimesMap[cellKey] || false;
-                    return (
-                      <td
-                        key={dIdx}
-                        className={`py-1 px-2 border font-bold ${
-                          att.startsWith("P")
-                            ? "bg-green-200 cursor-pointer"
-                            : att === "A"
-                            ? "bg-red-50/70 text-red-600"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          if (att.startsWith("P")) {
-                            setShowTimesMap((prev) => ({
-                              ...prev,
-                              [cellKey]: !prev[cellKey],
-                            }));
-                          }
-                        }}
-                      >
-                        {att.startsWith("P") ? (
-                          <>
-                            P{" "}
-                            {showTime && (
-                              <span className="text-[10px] font-normal">
-                                ({att.slice(3, -1)})
-                              </span>
-                            )}
-                          </>
-                        ) : att === "A" ? (
-                          "A"
-                        ) : (
-                          ""
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="py-2 px-2 border font-bold">
-                    {customPercent[student.id] ?? student.percentage}%
-                  </td>
-                </tr>
+                  {day.dayName}
+                  <br />
+                  {day.date.getDate()}
+                </th>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              <th className="py-2 px-2 border bg-blue-500 text-white">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groupedStudents().map((student, idx) => (
+              <tr
+                key={student.fingerprintId || idx}
+                className="hover:bg-gray-100"
+              >
+                <td className="py-1 px-2 border">{idx + 1}</td>
+                <td className="py-1 px-2 border">{student.name}</td>
+                <td className="py-1 px-2 border">{student.indexNum}</td>
+                {student.dailyAttendance.map((att, dIdx) => {
+                  const cellKey = `${student.id}-${dIdx}`;
+                  const showTime = showTimesMap[cellKey] || false;
+                  return (
+                    <td
+                      key={dIdx}
+                      className={`py-1 px-1 sm:px-2 border font-bold ${
+                        att.startsWith("P")
+                          ? "bg-green-200 cursor-pointer"
+                          : att === "A"
+                          ? "bg-red-50/70 text-red-600"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        if (att.startsWith("P")) {
+                          setShowTimesMap((prev) => ({
+                            ...prev,
+                            [cellKey]: !prev[cellKey],
+                          }));
+                        }
+                      }}
+                    >
+                      {att.startsWith("P") ? (
+                        <>
+                          P{" "}
+                          {showTime && (
+                            <span className="text-[8px] sm:text-[10px] font-normal">
+                              ({att.slice(3, -1)})
+                            </span>
+                          )}
+                        </>
+                      ) : att === "A" ? (
+                        "A"
+                      ) : (
+                        ""
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="py-1 px-2 border font-bold text-sm">
+                  {customPercent[student.id] ?? student.percentage}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
