@@ -15,6 +15,11 @@
 #define SCREEN_HEIGHT 128
 Adafruit_SH1107 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
+int16_t tx1, ty1;
+uint16_t tw, th;
+String bottomMsg = "Waiting...";
+unsigned long lastTopUpdate = 0;
+
 // ---------------- ESP32 UART for AS608 ----------------
 HardwareSerial mySerial(1);
 #define RX_PIN 18
@@ -26,9 +31,8 @@ Adafruit_Fingerprint finger(&mySerial);
 #define RED_LED 4
 
 // ---------------- EEPROM settings ----------------
-#define EEPROM_SIZE 1024 // Adjust according to max students
+#define EEPROM_SIZE 1024
 #define MAX_STUDENTS 50
-#define STUDENT_SIZE 64 // Approx bytes per student record
 
 // ---------------- Firebase ----------------
 FirebaseData fbdo;
@@ -54,12 +58,13 @@ SystemState currentState = VERIFY;
 
 // ---------------- NTP ----------------
 const char *ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 19800;  // GMT+5:30
+const long gmtOffset_sec = 19800;
 const int daylightOffset_sec = 0;
 
 // ---------------- Function Prototypes ----------------
-void oledMsg(String msg, uint8_t line = 0, bool sendToFirebase = false);
-void oledIdle();
+void oledTop();
+void oledBottom(String msg, uint8_t line = 0, bool sendToFirebase = false);
+void oledBottomRefresh();
 void enrollFinger(FirebaseJson &enrollDataJson);
 void verifyFingerNonBlocking();
 bool writeFirebase(String path, FirebaseJson &json);
@@ -80,11 +85,9 @@ void setup() {
   digitalWrite(GREEN_LED, LOW);
   digitalWrite(RED_LED, LOW);
 
-  // Initialize EEPROM
   EEPROM.begin(EEPROM_SIZE);
   loadStudentsFromEEPROM();
 
-  // Initialize OLED
   Wire.begin(21, 22);
   if (!display.begin(0x3C, true)) {
     Serial.println(F("OLED init failed"));
@@ -94,20 +97,20 @@ void setup() {
   display.setRotation(0);
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  oledMsg("System Booting...");
 
-  // Initialize fingerprint sensor
+  oledBottom("System Booting...");
+
   mySerial.begin(57600, SERIAL_8N1, RX_PIN, TX_PIN);
   delay(100);
-  oledMsg("Checking AS608...");
+  oledBottom("Checking AS608...");
   if (finger.verifyPassword()) {
-    oledMsg("AS608 Found!");
+    oledBottom("AS608 Found!");
     Serial.println("AS608 Found!");
     Serial.print("Sensor contains ");
     Serial.print(finger.templateCount);
     Serial.println(" templates");
   } else {
-    oledMsg("AS608 NOT FOUND!");
+    oledBottom("AS608 NOT FOUND!");
     Serial.println("Check wiring!");
     digitalWrite(RED_LED, HIGH);
     while (1) delay(1);
@@ -116,7 +119,6 @@ void setup() {
   reconnectWiFi();
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-  // Firebase init
   config.database_url = FIREBASE_HOST;
   config.signer.tokens.legacy_token = FIREBASE_AUTH;
   Firebase.begin(&config, &auth);
@@ -124,23 +126,28 @@ void setup() {
 
   if (Firebase.ready()) {
     firebaseReady = true;
-    oledMsg("Firebase Ready!");
+    oledBottom("Firebase Ready!");
     Serial.println("Firebase Ready");
     Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
   } else {
-    oledMsg("Firebase Failed!");
+    oledBottom("Firebase Failed!");
     Serial.println("Firebase init failed");
   }
 
   currentState = VERIFY;
-  oledIdle();
+  bottomMsg = "Place finger..."; // Initial message
+  oledBottomRefresh();
 }
 
 // ---------------- Loop ----------------
 unsigned long lastHeartbeat = 0;
 
 void loop() {
-  // Auto-reconnect
+  if (millis() - lastTopUpdate > 1000) {
+    oledTop();
+    lastTopUpdate = millis();
+  }
+
   if (WiFi.status() != WL_CONNECTED) reconnectWiFi();
   if (!Firebase.ready()) {
     firebaseReady = false;
@@ -149,7 +156,6 @@ void loop() {
     firebaseReady = true;
   }
 
-  // Heartbeat every 10s
   if (firebaseReady && millis() - lastHeartbeat > 10000) {
     Firebase.RTDB.setString(&fbdo, "/status", getTimestamp());
     lastHeartbeat = millis();
@@ -157,7 +163,6 @@ void loop() {
 
   if (!firebaseReady) return;
 
-  // Get system state from Firebase
   String state = "";
   if (Firebase.RTDB.getString(&fbdo, "/systemState")) state = fbdo.stringData();
 
@@ -166,11 +171,19 @@ void loop() {
     currentState = ENROLL;
     FirebaseJson enrollJson;
     if (Firebase.RTDB.getJSON(&fbdo, "/enrollData")) enrollJson = fbdo.jsonObject();
-    oledMsg("Enrollment Started...", 0, true);
+    oledBottom("Enrollment Started...", 0, true);
     enrollFinger(enrollJson);
+
+    // Short success message before switching back to VERIFY
+    oledBottom("Enrollment Complete!", 0, true);
+    delay(1500);
+
     Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
     currentState = VERIFY;
-    oledIdle();
+
+    // Let verifyFingerNonBlocking handle OLED
+    bottomMsg = "Place finger...";
+    oledBottomRefresh();
   }
 
   // Verification
@@ -180,12 +193,47 @@ void loop() {
 }
 
 // ---------------- OLED helpers ----------------
-void oledMsg(String msg, uint8_t line, bool sendToFirebase) {
-  display.clearDisplay();
-  display.setCursor(0, line * 10);
-  display.println(msg);
+void oledTop() {
+  display.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
+  display.setTextSize(1);
+
+  display.setCursor(0, 0);
+  display.print(WiFi.status() == WL_CONNECTED ? "WiFi:Ok" : "WiFi:X");
+  display.setCursor(SCREEN_WIDTH - 32, 0);
+  display.print(firebaseReady ? "FB:Ok" : "FB:X");
+
+  struct tm t;
+  char buf[20];
+  int dateY = 20;
+  if (getLocalTime(&t)) {
+    strftime(buf, sizeof(buf), "%d-%m | %H:%M", &t);
+    display.getTextBounds(buf, 0, dateY, &tx1, &ty1, &tw, &th);
+    display.setCursor((SCREEN_WIDTH - tw) / 2, dateY);
+    display.println(buf);
+  } else {
+    display.setCursor(10, dateY);
+    display.println("--:--:--");
+  }
+
+  String devInfo = "FOC - SE";
+  display.setTextSize(2);
+  display.getTextBounds(devInfo, 0, 40, &tx1, &ty1, &tw, &th);
+  display.setCursor((SCREEN_WIDTH - tw) / 2, 40);
+  display.println(devInfo);
+  display.setTextSize(1);
+
+  display.drawLine(0, SCREEN_HEIGHT / 2 - 1, SCREEN_WIDTH, SCREEN_HEIGHT / 2 - 1, SH110X_WHITE);
   display.display();
-  Serial.println("OLED: " + msg);
+}
+
+void oledBottom(String msg, uint8_t line, bool sendToFirebase) {
+  bottomMsg = msg;
+  display.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
+  display.setCursor(0, SCREEN_HEIGHT / 2);
+  display.print('\n');
+  display.println(bottomMsg);
+  display.display();
+  Serial.println("OLED Bottom: " + msg);
 
   if (sendToFirebase && firebaseReady) {
     FirebaseJson json;
@@ -194,10 +242,11 @@ void oledMsg(String msg, uint8_t line, bool sendToFirebase) {
   }
 }
 
-void oledIdle() {
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.println("Waiting...");
+void oledBottomRefresh() {
+  display.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
+  display.setCursor(0, SCREEN_HEIGHT / 2);
+  display.print('\n');
+  display.println(bottomMsg);
   display.display();
 }
 
@@ -207,12 +256,12 @@ bool writeFirebase(String path, FirebaseJson &json) {
   return Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json);
 }
 
-// ---------------- Get Timestamp ----------------
+// ---------------- Timestamp ----------------
 String getTimestamp() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return "Unknown";
   char buffer[30];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &timeinfo); // ISO
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &timeinfo);
   return String(buffer);
 }
 
@@ -229,14 +278,14 @@ bool readEnrollData(FirebaseJson &json, String &name, String &regNum, String &in
 // ---------------- Enrollment ----------------
 void enrollFinger(FirebaseJson &enrollDataJson) {
   if (studentCount >= MAX_STUDENTS) {
-    oledMsg("Max students!", 0, true);
+    oledBottom("Max students!", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   String name, regNum, indexNum, email;
   if (!readEnrollData(enrollDataJson, name, regNum, indexNum, email)) {
-    oledMsg("Invalid data!", 0, true);
+    oledBottom("Invalid data!", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
@@ -244,46 +293,46 @@ void enrollFinger(FirebaseJson &enrollDataJson) {
   uint8_t id = studentCount + 1;
   int p = -1;
 
-  oledMsg("Place finger...", 0, true);
+  oledBottom("Place finger...", 0, true);
   while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    if (p != FINGERPRINT_NOFINGER) oledMsg("Image error!", 0, true);
+    if (p != FINGERPRINT_NOFINGER) oledBottom("Image error!", 0, true);
     delay(50);
   }
   if (finger.image2Tz(1) != FINGERPRINT_OK) {
-    oledMsg("Image fail", 0, true);
+    oledBottom("Image fail", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   p = finger.fingerSearch();
   if (p == FINGERPRINT_OK) {
-    oledMsg("Already Enrolled!", 0, true);
+    oledBottom("Already Enrolled!", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     if (firebaseReady) Firebase.RTDB.deleteNode(&fbdo, "/messages");
     return;
   }
 
-  oledMsg("Remove finger", 0, true); delay(2000);
+  oledBottom("Remove finger", 0, true); delay(2000);
   while (finger.getImage() != FINGERPRINT_NOFINGER);
 
-  oledMsg("Place again...", 0, true);
+  oledBottom("Place again...", 0, true);
   while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    if (p != FINGERPRINT_NOFINGER) oledMsg("Image error!", 0, true);
+    if (p != FINGERPRINT_NOFINGER) oledBottom("Image error!", 0, true);
     delay(50);
   }
   if (finger.image2Tz(2) != FINGERPRINT_OK) {
-    oledMsg("2nd fail", 0, true);
+    oledBottom("2nd fail", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   if (finger.createModel() != FINGERPRINT_OK) {
-    oledMsg("Model fail", 0, true);
+    oledBottom("Model fail", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
   if (finger.storeModel(id) != FINGERPRINT_OK) {
-    oledMsg("Store fail", 0, true);
+    oledBottom("Store fail", 0, true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
@@ -296,11 +345,10 @@ void enrollFinger(FirebaseJson &enrollDataJson) {
   studentCount++;
   saveStudentsToEEPROM();
 
-  oledMsg("Enroll Success: " + name, 0, true);
+  oledBottom("Enroll Success:\n \n -> " + name, 0, true);
   digitalWrite(GREEN_LED, HIGH); delay(1000); digitalWrite(GREEN_LED, LOW);
 
   if (firebaseReady) {
-    Firebase.RTDB.deleteNode(&fbdo, "/messages");
     String path = "/students/" + String(id);
     FirebaseJson json;
     json.set("id", id);
@@ -309,10 +357,11 @@ void enrollFinger(FirebaseJson &enrollDataJson) {
     json.set("indexNum", indexNum);
     json.set("email", email);
     writeFirebase(path, json);
+    Firebase.RTDB.deleteNode(&fbdo, "/messages");
   }
 }
 
-// ---------------- Non-blocking Verification ----------------
+// ---------------- Verification ----------------
 void verifyFingerNonBlocking() {
   static unsigned long lastCheck = 0;
   static bool showingMsg = false;
@@ -322,10 +371,10 @@ void verifyFingerNonBlocking() {
 
   int p = finger.getImage();
   if (p == FINGERPRINT_NOFINGER) {
-    if (!showingMsg) { oledMsg("Place finger...", 0); showingMsg = true; }
+    if (!showingMsg) { oledBottom("Place finger..."); showingMsg = true; }
     return;
   } else if (p != FINGERPRINT_OK) {
-    oledMsg("Image error!", 0);
+    oledBottom("Image error!");
     digitalWrite(RED_LED, HIGH); delay(500); digitalWrite(RED_LED, LOW);
     showingMsg = false;
     return;
@@ -333,7 +382,7 @@ void verifyFingerNonBlocking() {
   showingMsg = false;
 
   if (finger.image2Tz(1) != FINGERPRINT_OK) {
-    oledMsg("Image conv fail", 0);
+    oledBottom("Image conv fail");
     digitalWrite(RED_LED, HIGH); delay(500); digitalWrite(RED_LED, LOW);
     return;
   }
@@ -350,7 +399,7 @@ void verifyFingerNonBlocking() {
       }
     }
 
-    oledMsg("Welcome: " + name, 0);
+    oledBottom("Welcome:\n \n-> " + name);
     digitalWrite(GREEN_LED, HIGH); delay(500); digitalWrite(GREEN_LED, LOW);
 
     if (firebaseReady) {
@@ -365,7 +414,7 @@ void verifyFingerNonBlocking() {
       writeFirebase(path, json);
     }
   } else {
-    oledMsg("No Match!", 0);
+    oledBottom("No Match!");
     digitalWrite(RED_LED, HIGH); delay(500); digitalWrite(RED_LED, LOW);
   }
 }
