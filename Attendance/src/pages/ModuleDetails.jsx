@@ -38,14 +38,14 @@ const ModuleDetails = () => {
         {/* Schedule */}
         {moduleData.length > 0 && (
           <div className=" flex gap-3 mt-4">
-            <h2 className="text-xl md:text-2xl font-semibold text-gray-700">
-              Schedule →
+            <h2 className="md:text-2xl font-semibold text-gray-700">
+              Schedule
             </h2>
             <div className="flex flex-wrap gap-3">
               {moduleData.map((data, idx) => (
                 <span
                   key={idx}
-                  className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-medium hover:bg-green-200 transition-colors"
+                  className="bg-green-100 text-green-800 text-xs md:text-md px-3 py-1 md:py-2 rounded-full font-medium hover:bg-green-200 transition-colors"
                 >
                   {data.day} ({data.time})
                 </span>
