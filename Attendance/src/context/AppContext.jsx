@@ -121,6 +121,7 @@ const AppContextProvider = ({ children }) => {
               indexNum: fbData[key].indexNum,
               regNum: fbData[key].regNum || "",
               name: fbData[key].name,
+              email: fbData[key].email,
               fingerprintId: fbData[key].fingerprintId || fbData[key].id,
               attendance: [],
               timestamps: [],

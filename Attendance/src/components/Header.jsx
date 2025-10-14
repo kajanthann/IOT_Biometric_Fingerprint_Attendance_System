@@ -4,7 +4,7 @@ import { AppContext } from "../context/AppContext";
 
 const Header = ({ token, setToken }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { espStatus, lastSeen } = useContext(AppContext);
+  const { espStatus } = useContext(AppContext);
 
   const handleLogout = () => {
     setToken("");
@@ -32,13 +32,6 @@ const Header = ({ token, setToken }) => {
                 espStatus === "ONLINE" ? "bg-[#00ff88] animate-pulse" : "bg-[#ff5c5c]"
               }`}
             ></span>}
-
-            {/* Last Seen */}
-            {token && espStatus === "OFFLINE" && lastSeen && (
-              <span className="text-[10px] text-black ml-1 bg-[#e0f9f0] md:hidden lg:block rounded-full px-1 py-[2px] mt-2">
-                Last Seen: {formatLastSeen(lastSeen)}
-              </span>
-            )}
           </div>
         </NavLink>
 

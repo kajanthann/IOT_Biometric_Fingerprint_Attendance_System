@@ -113,7 +113,7 @@ const RegisterStudent = () => {
             placeholder="Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="border p-2 mb-2 w-full"
+            className="border p-1 md:p-2 mb-2 w-full"
             disabled={loading}
           />
           <input
@@ -121,7 +121,7 @@ const RegisterStudent = () => {
             placeholder="RegNum"
             value={regNum}
             onChange={(e) => setRegNum(e.target.value)}
-            className="border p-2 mb-2 w-full"
+            className="border p-1 md:p-2 mb-2 w-full"
             disabled={loading}
           />
           <input
@@ -129,7 +129,7 @@ const RegisterStudent = () => {
             placeholder="IndexNum"
             value={indexNum}
             onChange={(e) => setIndexNum(e.target.value)}
-            className="border p-2 mb-2 w-full"
+            className="border p-1 md:p-2 mb-2 w-full"
             disabled={loading}
           />
           <input
@@ -137,13 +137,13 @@ const RegisterStudent = () => {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="border p-2 mb-2 w-full"
+            className="border p-1 md:p-2 mb-2 w-full"
             disabled={loading}
           />
 
           <div className="text-red-500 text-sm">{error}</div>
 
-          <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center justify-between mt-2 md:mt-4">
             <button
               onClick={startEnroll}
               disabled={loading || espStatus !== "ONLINE"}

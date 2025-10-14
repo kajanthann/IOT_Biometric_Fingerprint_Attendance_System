@@ -70,8 +70,8 @@ const Students = ({ token, adminEmail }) => {
                 <th className="py-2 px-2 md:px-4 border">ID</th>
                 <th className="py-2 px-2 md:px-4 border">Fingerprint ID</th>
                 <th className="py-2 px-2 md:px-4 border">Name</th>
+                <th className="py-2 px-2 md:px-4 border">Email</th>
                 <th className="py-2 px-2 md:px-4 border">RegNum</th>
-                <th className="py-2 px-2 md:px-4 border">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -93,18 +93,12 @@ const Students = ({ token, adminEmail }) => {
                     {student.name}
                   </td>
                   <td className="py-1 md:py-2 px-2 md:px-4 border">
-                    {student.regNum}
+                    {student.email}
                   </td>
                   <td className="py-1 md:py-2 px-2 md:px-4 border">
-                    <div className="flex gap-2 justify-center">
-                      <div className="bg-yellow-300 px-1 rounded border border-gray-400 flex justify-center cursor-pointer items-center">
-                        <i className="fa fa-envelope-o"></i>
-                      </div>
-                      <div className="bg-rose-100 px-2 text-red-700 rounded border border-gray-400 cursor-pointer flex justify-center items-center">
-                        X
-                      </div>
-                    </div>
+                    {student.regNum}
                   </td>
+                  
                 </tr>
               ))}
             </tbody>

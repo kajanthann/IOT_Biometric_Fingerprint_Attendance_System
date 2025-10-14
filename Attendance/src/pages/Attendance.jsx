@@ -134,7 +134,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
   return (
     <div className="px-4 sm:px-8 lg:px-16">
       {/* View Toggle */}
-      <div className="flex flex-col sm:flex-row justify-between gap-2 my-4">
+      <div className="flex flex-row justify-between gap-2 my-4">
         <div className="flex gap-2 mb-2 sm:mb-0">
           <button
             onClick={() => setView("summary")}
@@ -157,7 +157,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
         <div className="relative">
           {view === "summary" && (
             <div
-              className="cursor-pointer px-3 bg-black text-white font-bold rounded py-1 text-sm sm:text-base"
+              className="cursor-pointer px-4 py-2 bg-black text-white font-bold rounded text-sm sm:text-base"
               onClick={() => setShowDatePicker(!showDatePicker)}
             >
               %
@@ -193,7 +193,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-row items-center gap-2 w-full md:w-auto">
           <h1 className="text-xl sm:text-2xl font-bold">Attendance</h1>
           <div className="flex items-center gap-2 mt-2 md:mt-0">
             <span
@@ -346,9 +346,12 @@ const Attendance = ({ day, timeSlots = [] }) => {
                           <>
                             P{" "}
                             {showTime && (
-                              <span className="text-[8px] sm:text-[10px] font-normal">
+                              <div className="w-20 md:w-50">
+                                <span className="text-[8px] font-normal">
                                 ({att.slice(3, -1)})
                               </span>
+                              </div>
+                              
                             )}
                           </>
                         ) : att === "A" ? (
