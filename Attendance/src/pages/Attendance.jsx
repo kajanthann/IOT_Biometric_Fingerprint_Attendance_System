@@ -3,7 +3,7 @@ import { AppContext } from "../context/AppContext";
 import { filterBySlots } from "../utils/attendanceUtils";
 
 const Attendance = ({ day, timeSlots = [] }) => {
-  const { students, loading } = useContext(AppContext);
+  const { students, loading, darkMode } = useContext(AppContext);
   const [search, setSearch] = useState("");
   const [attendanceFilter, setAttendanceFilter] = useState("all");
   const [view, setView] = useState("summary"); // "summary" | "raw"
@@ -11,12 +11,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear] = useState(today.getFullYear());
-
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [customPercent, setCustomPercent] = useState({});
   const [showTimesMap, setShowTimesMap] = useState({});
+
+  const primaryColor = "#01996f";
 
   const generateMonthDays = (year, month) => {
     const date = new Date(year, month - 1, 1);
@@ -131,24 +132,32 @@ const Attendance = ({ day, timeSlots = [] }) => {
     setShowDatePicker(false);
   };
 
+  // Theme colors
+  const bg = darkMode ? "bg-gray-900" : "bg-white";
+  const textColor = darkMode ? "text-gray-100" : "text-black";
+  const inputBg = darkMode ? "bg-gray-700" : "bg-white";
+  const inputText = darkMode ? "text-gray-100" : "text-black";
+  const borderColor = darkMode ? "border-gray-600" : "border-[#01996f]";
+  const hoverBg = darkMode ? "hover:bg-gray-700" : "hover:bg-gray-200";
+  const tableHeaderBg = darkMode ? "bg-gray-700" : "#01996f";
+  const tableHeaderText = darkMode ? "text-gray-100" : "text-white";
+
   return (
-    <div className="px-4 sm:px-8 lg:px-16">
+    <div className={`px-4 sm:px-8 lg:px-16 min-h-screen ${bg} ${textColor}`}>
       {/* View Toggle */}
-      <div className="flex flex-row justify-between gap-2 my-4">
+      <div className="flex flex-row justify-between gap-2 py-4">
         <div className="flex gap-2 mb-2 sm:mb-0">
           <button
             onClick={() => setView("summary")}
-            className={`px-4 py-2 rounded text-sm sm:text-base ${
-              view === "summary" ? "bg-green-500 text-white" : "bg-gray-200"
-            }`}
+            className={`px-4 py-2 rounded text-sm sm:text-base ${view === "summary" ? "text-white" : textColor}`}
+            style={{ backgroundColor: view === "summary" ? primaryColor : "" }}
           >
             Summary
           </button>
           <button
             onClick={() => setView("raw")}
-            className={`px-4 py-2 rounded text-sm sm:text-base ${
-              view === "raw" ? "bg-blue-500 text-white" : "bg-gray-200"
-            }`}
+            className={`px-4 py-2 rounded text-sm sm:text-base ${view === "raw" ? "text-white" : textColor}`}
+            style={{ backgroundColor: view === "raw" ? primaryColor : "" }}
           >
             Raw Logs
           </button>
@@ -157,7 +166,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
         <div className="relative">
           {view === "summary" && (
             <div
-              className="cursor-pointer px-4 py-2 bg-black text-white font-bold rounded text-sm sm:text-base"
+              className={`cursor-pointer px-4 py-2 rounded text-sm sm:text-base font-bold ${darkMode ? "bg-gray-800" : "bg-[#01996f] text-white"}`}
               onClick={() => setShowDatePicker(!showDatePicker)}
             >
               %
@@ -165,22 +174,23 @@ const Attendance = ({ day, timeSlots = [] }) => {
           )}
 
           {showDatePicker && (
-            <div className="absolute top-10 right-0 md:right-0 bg-white border rounded p-2 z-50 shadow-md">
+            <div className={`absolute top-10 right-0 md:right-0 p-2 rounded shadow-lg z-50 ${darkMode ? "bg-gray-800 border border-gray-700" : "bg-white border border-[#01996f]"}`}>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className={`border ${borderColor} rounded px-2 py-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
                 />
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className={`border ${borderColor} rounded px-2 py-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
                 />
                 <button
-                  className="px-2 py-1 bg-green-500 text-white rounded text-sm sm:text-base"
+                  className="px-2 py-1 rounded text-sm sm:text-base text-white"
+                  style={{ backgroundColor: primaryColor }}
                   onClick={calculateCustomPercentage}
                 >
                   Calculate
@@ -197,16 +207,14 @@ const Attendance = ({ day, timeSlots = [] }) => {
           <h1 className="text-xl sm:text-2xl font-bold">Attendance</h1>
           <div className="flex items-center gap-2 mt-2 md:mt-0">
             <span
-              className="cursor-pointer border px-2 py-1 hover:bg-black hover:text-white rounded text-sm sm:text-base"
+              className={`cursor-pointer border px-2 py-1 rounded text-sm sm:text-base ${hoverBg}`}
               onClick={handlePrevMonth}
             >
               ←
             </span>
-            <span className="text-sm sm:text-base">
-              {month}/{year}
-            </span>
+            <span className="text-sm sm:text-base">{month}/{year}</span>
             <span
-              className="cursor-pointer border px-2 py-1 hover:bg-black hover:text-white rounded text-sm sm:text-base"
+              className={`cursor-pointer border px-2 py-1 rounded text-sm sm:text-base ${hoverBg}`}
               onClick={handleNextMonth}
             >
               →
@@ -218,13 +226,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
           <input
             type="text"
             placeholder="Search Name/Index..."
-            className="border border-gray-300 rounded px-3 py-2 flex-1 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-green-400"
+            className={`border ${borderColor} rounded px-3 py-2 flex-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           {view === "summary" && (
             <select
-              className="border border-gray-300 rounded px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-green-400"
+              className={`border ${borderColor} rounded px-3 py-2 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
               value={attendanceFilter}
               onChange={(e) => setAttendanceFilter(e.target.value)}
             >
@@ -241,13 +249,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
         <div className="flex justify-center items-center min-h-[200px]">
           <div
             className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4"
-            style={{ color: "#02c986" }}
+            style={{ borderColor: primaryColor }}
           />
         </div>
       ) : view === "raw" ? (
         <div className="overflow-x-auto w-full">
-          <table className="min-w-full border text-center text-xs sm:text-sm">
-            <thead className="bg-blue-600 text-white sticky top-0">
+          <table className={`min-w-full border text-center text-xs sm:text-sm ${bg} ${textColor}`}>
+            <thead className={`${tableHeaderBg} ${tableHeaderText} sticky top-0`}>
               <tr>
                 <th className="py-1 px-2 border">#</th>
                 <th className="py-1 px-2 border">Name</th>
@@ -258,16 +266,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
             <tbody>
               {groupedStudents().length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="py-4 text-gray-500 italic">
+                  <td colSpan="4" className="py-4 text-gray-400 italic">
                     No attendance found.
                   </td>
                 </tr>
               ) : (
                 groupedStudents().map((student, idx) => (
-                  <tr
-                    key={student.fingerprintId || idx}
-                    className="hover:bg-gray-100"
-                  >
+                  <tr key={student.fingerprintId || idx} className={hoverBg}>
                     <td className="py-1 px-2 border">{idx + 1}</td>
                     <td className="py-1 px-2 border">{student.name}</td>
                     <td className="py-1 px-2 border">{student.indexNum}</td>
@@ -290,33 +295,26 @@ const Attendance = ({ day, timeSlots = [] }) => {
           </table>
         </div>
       ) : (
-        // Summary Table
         <div className="overflow-x-auto w-full">
-          <table className="min-w-full border text-center text-xs sm:text-sm">
-            <thead className="bg-slate-100 sticky top-0">
+          <table className={`min-w-full border text-center text-xs sm:text-sm ${bg} ${textColor}`}>
+            <thead className={`${tableHeaderBg} ${primaryColor} sticky top-0`}>
               <tr>
                 <th className="py-1 px-2 border">#</th>
                 <th className="py-1 px-2 border">Name</th>
                 <th className="py-1 px-2 border">Index</th>
                 {monthDays.map((day, idx) => (
-                  <th
-                    key={idx}
-                    className="py-1 px-1 sm:px-2 border text-[10px] sm:text-xs"
-                  >
+                  <th key={idx} className="py-1 px-1 sm:px-2 border text-[10px] sm:text-xs">
                     {day.dayName}
                     <br />
                     {day.date.getDate()}
                   </th>
                 ))}
-                <th className="py-2 px-2 border bg-blue-500 text-white">%</th>
+                <th className="py-2 px-2 border bg-[#01996f] text-white">%</th>
               </tr>
             </thead>
             <tbody>
               {groupedStudents().map((student, idx) => (
-                <tr
-                  key={student.fingerprintId || idx}
-                  className="hover:bg-gray-100"
-                >
+                <tr key={student.fingerprintId || idx} className={hoverBg}>
                   <td className="py-1 px-2 border">{idx + 1}</td>
                   <td className="py-1 px-2 border">{student.name}</td>
                   <td className="py-1 px-2 border">{student.indexNum}</td>
@@ -326,11 +324,11 @@ const Attendance = ({ day, timeSlots = [] }) => {
                     return (
                       <td
                         key={dIdx}
-                        className={`py-1 px-1 sm:px-2 border font-bold ${
+                        className={`py-1 px-1 sm:px-2 border font-bold cursor-pointer ${
                           att.startsWith("P")
-                            ? "bg-green-200 cursor-pointer"
+                            ? "text-green-600"
                             : att === "A"
-                            ? "bg-red-50/70 text-red-600"
+                            ? "text-red-700"
                             : ""
                         }`}
                         onClick={() => {
@@ -348,10 +346,9 @@ const Attendance = ({ day, timeSlots = [] }) => {
                             {showTime && (
                               <div className="w-20 md:w-50">
                                 <span className="text-[8px] font-normal">
-                                ({att.slice(3, -1)})
-                              </span>
+                                  ({att.slice(3, -1)})
+                                </span>
                               </div>
-                              
                             )}
                           </>
                         ) : att === "A" ? (

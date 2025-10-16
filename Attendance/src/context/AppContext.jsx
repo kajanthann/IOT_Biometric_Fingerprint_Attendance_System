@@ -12,29 +12,38 @@ const AppContextProvider = ({ children }) => {
   const [data, setData] = useState([]); // raw CSV data if needed
   const [loading, setLoading] = useState(true);
   const [espStatus, setEspStatus] = useState("OFFLINE"); // NEW: ESP32 status
-  const [lastSeen, setLastSeen] = useState(null); // NEW: lastSeen timestamp
+  const [darkMode, setDarkMode] = useState(
+    localStorage.getItem("theme") === "dark"
+  );
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [darkMode]);
 
   const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
   const csvUrl = import.meta.env.VITE_GOOGLESHEET;
 
-
-
   // ✅ --- CSV FETCH ---
   const fetchCSV = (callback, header = true) => {
-  if (!csvUrl) {
-    console.error("CSV URL is undefined!");
-    return;
-  }
+    if (!csvUrl) {
+      console.error("CSV URL is undefined!");
+      return;
+    }
 
-  Papa.parse(csvUrl, {
-    download: true,
-    header,
-    skipEmptyLines: true,
-    complete: callback,
-    error: (err) => console.error("CSV Error:", err),
-  });
-};
-
+    Papa.parse(csvUrl, {
+      download: true,
+      header,
+      skipEmptyLines: true,
+      complete: callback,
+      error: (err) => console.error("CSV Error:", err),
+    });
+  };
 
   // ✅ --- MODULE FETCH ---
   const fetchModules = () => {
@@ -86,8 +95,6 @@ const AppContextProvider = ({ children }) => {
     onValue(statusRef, (snapshot) => {
       const currentValue = snapshot.val();
       if (!currentValue) return;
-
-      setLastSeen(currentValue);
 
       if (lastValue === null || currentValue !== lastValue) {
         setEspStatus("ONLINE");
@@ -250,10 +257,11 @@ const AppContextProvider = ({ children }) => {
     modules,
     data,
     loading,
-    lastSeen,
     espStatus,
     groupedStudents,
     calculateCustomPercentage,
+    setDarkMode,
+    darkMode,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
