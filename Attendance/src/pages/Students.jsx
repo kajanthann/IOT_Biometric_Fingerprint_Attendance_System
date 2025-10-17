@@ -56,7 +56,7 @@ const Students = ({ token, adminEmail }) => {
             {/* Close button */}
             <button
               onClick={() => setShowRegister(false)}
-              className="absolute top-2 right-2 text-xl font-bold text-gray-400 hover:text-white"
+              className="absolute top-2 right-2 text-xl font-bold text-gray-400 hover:text-black cursor-pointer"
             >
               ✕
             </button>

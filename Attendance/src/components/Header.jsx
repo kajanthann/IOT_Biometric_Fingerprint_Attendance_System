@@ -238,14 +238,14 @@ const Header = ({ token, setToken }) => {
             <NavLink
               to="/login"
               onClick={() => setMenuOpen(false)}
-              className="block py-2 bg-white/20 text-white rounded-lg hover:bg-white/30"
+              className="block py-2 bg-teal-700 text-white rounded-lg hover:bg-white/30"
             >
               Login
             </NavLink>
           ) : (
             <button
               onClick={handleLogout}
-              className="block py-2 bg-white/20 text-white rounded-2xl hover:bg-white/30 w-full"
+              className="block py-2 bg-teal-700 text-white rounded-2xl hover:bg-white/30 w-full"
             >
               Logout
             </button>

@@ -13,8 +13,8 @@ const TimeTable = () => {
         ? "bg-gray-800"
         : "bg-gray-700"
       : idx % 2 === 0
-      ? "bg-green-100"
-      : "bg-green-200";
+      ? "bg-gray-100"
+      : "bg-slate-200";
 
   return (
     <div className={`px-4 sm:px-8 lg:px-16 mx-auto py-8 ${bg} ${textColor} min-h-screen`}>
@@ -42,7 +42,7 @@ const TimeTable = () => {
               {data.slice(1).map((row, idx) => (
                 <tr
                   key={idx}
-                  className={`transition ${rowBg(idx)} hover:bg-[#01996f]/20`}
+                  className={`transition ${rowBg(idx)} ${darkMode ? 'hover:bg-gray-950' : 'hover:bg-gray-300'}`}
                 >
                   {Object.values(row).map((cell, cellIdx) => (
                     <td

@@ -180,13 +180,13 @@ const Attendance = ({ day, timeSlots = [] }) => {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className={`border ${borderColor} rounded px-2 py-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
+                  className={`border rounded px-2 py-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
                 />
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className={`border ${borderColor} rounded px-2 py-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
+                  className={`border rounded px-2 py-1 text-sm sm:text-base ${inputBg} ${inputText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
                 />
                 <button
                   className="px-2 py-1 rounded text-sm sm:text-base text-white"
