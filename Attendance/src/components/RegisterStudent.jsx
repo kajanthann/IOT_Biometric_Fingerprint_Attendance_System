@@ -107,7 +107,7 @@ const RegisterStudent = () => {
 
   return (
     <div className={`p-4 md:p-2 max-w-6xl mx-auto ${bgMain} ${textMain}`}>
-      <h1 className="text-2xl md:text-4xl font-bold mb-6 text-center" style={{ color: primaryColor }}>
+      <h1 className="text-2xl lg:text-4xl font-bold mb-6 text-center" style={{ color: primaryColor }}>
         ESP32 Attendance System
       </h1>
 
