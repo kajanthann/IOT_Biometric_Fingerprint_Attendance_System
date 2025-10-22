@@ -49,7 +49,7 @@ const Students = ({ token, adminEmail }) => {
       {showRegister && (
         <div className="fixed inset-0 flex items-center p-4 pt-20 justify-center bg-opacity-50 backdrop-blur-sm z-50">
           <div
-            className={`rounded-lg shadow-lg md:p-6 w-full max-w-4xl relative border ${borderColor} ${
+            className={`rounded-lg shadow-lg md:p-2  w-full max-w-4xl relative border ${borderColor} ${
               darkMode ? "bg-gray-800" : "bg-white"
             }`}
           >
@@ -83,21 +83,17 @@ const Students = ({ token, adminEmail }) => {
             <thead className={`sticky top-0 ${tableHeaderBg} ${borderColor}`}>
               <tr>
                 <th className={`py-2 px-2 md:px-4 border ${borderColor}`}>#</th>
-                <th className={`py-2 px-2 md:px-4 border ${borderColor}`}>ID</th>
                 <th className={`py-2 px-2 md:px-4 border ${borderColor}`}>Fingerprint ID</th>
                 <th className={`py-2 px-2 md:px-4 border ${borderColor}`}>Name</th>
-                <th className={`py-2 px-2 md:px-4 border ${borderColor}`}>Email</th>
                 <th className={`py-2 px-2 md:px-4 border ${borderColor}`}>RegNum</th>
               </tr>
             </thead>
             <tbody>
               {students.map((student, index) => (
-                <tr key={student.indexNum} className={`${hoverBg} transition-colors`}>
+                <tr key={index} className={`${hoverBg} transition-colors`}>
                   <td className={`py-1 md:py-2 px-2 md:px-4 border ${borderColor}`}>{index + 1}</td>
-                  <td className={`py-1 md:py-2 px-2 md:px-4 border ${borderColor}`}>{student.indexNum}</td>
                   <td className={`py-1 md:py-2 px-2 md:px-4 border ${borderColor}`}>{"FID_156" + student.fingerprintId}</td>
                   <td className={`py-1 md:py-2 px-2 md:px-4 border ${borderColor}`}>{student.name}</td>
-                  <td className={`py-1 md:py-2 px-2 md:px-4 border ${borderColor}`}>{student.email}</td>
                   <td className={`py-1 md:py-2 px-2 md:px-4 border ${borderColor}`}>{student.regNum}</td>
                 </tr>
               ))}

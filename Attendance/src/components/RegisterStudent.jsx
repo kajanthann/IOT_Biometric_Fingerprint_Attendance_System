@@ -6,30 +6,27 @@ import { AppContext } from "../context/AppContext";
 const RegisterStudent = () => {
   const [name, setName] = useState("");
   const [regNum, setRegNum] = useState("");
-  const [indexNum, setIndexNum] = useState("");
-  const [email, setEmail] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const { espStatus, darkMode } = useContext(AppContext);
-
   const primaryColor = "#02c986";
 
-  // Theme-aware classes
   const bgMain = darkMode ? "bg-gray-900" : "bg-white";
   const textMain = darkMode ? "text-gray-100" : "text-gray-900";
   const cardBg = darkMode ? "bg-gray-800" : "bg-white";
   const cardBorder = darkMode ? "border-gray-700" : "border-gray-300";
   const inputBg = darkMode ? "bg-gray-700/70" : "bg-gray-100";
   const inputText = darkMode ? "text-white" : "text-gray-900";
-  const placeholderText = darkMode ? "placeholder-gray-400" : "placeholder-gray-500";
+  const placeholderText = darkMode
+    ? "placeholder-gray-400"
+    : "placeholder-gray-500";
   const messageBg = darkMode ? "bg-gray-800" : "bg-gray-100";
   const messageText = darkMode ? "text-gray-100" : "text-gray-900";
 
   useEffect(() => {
     const msgRef = ref(database, "/messages");
-
     const listener = onValue(msgRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -51,12 +48,9 @@ const RegisterStudent = () => {
 
         if (stopLoading) {
           setLoading(false);
-
           if (list.some((msg) => msg.includes("Enroll Success"))) {
             setName("");
             setRegNum("");
-            setIndexNum("");
-            setEmail("");
           }
 
           const failMsg = list.find((msg) =>
@@ -72,16 +66,14 @@ const RegisterStudent = () => {
           );
           setError(failMsg || "");
         }
-      } else {
-        setMessages([]);
-      }
+      } else setMessages([]);
     });
 
     return () => off(msgRef, "value", listener);
   }, []);
 
   const startEnroll = async () => {
-    if (!name || !regNum || !indexNum || !email) {
+    if (!name || !regNum) {
       setError("Please fill all fields!");
       return;
     }
@@ -91,103 +83,132 @@ const RegisterStudent = () => {
     setError("");
 
     try {
-      await set(ref(database, "/enrollData"), {
-        name,
-        regNum,
-        indexNum,
-        email,
-      });
+      await set(ref(database, "/enrollData"), { name, regNum });
       await set(ref(database, "/systemState"), "ENROLL");
     } catch (err) {
       console.error("Firebase write error:", err);
       setLoading(false);
-      setError("Failed to start enrollment. Check console for details.");
+      setError("Failed to start enrollment.");
     }
   };
 
   return (
-    <div className={`p-4 md:p-2 max-w-6xl mx-auto ${bgMain} ${textMain}`}>
-      <h1 className="text-2xl lg:text-4xl font-bold mb-6 text-center" style={{ color: primaryColor }}>
+    <div className={`p-4 md:p-6 max-w-4xl mx-auto ${bgMain} ${textMain}`}>
+      <h1
+        className="text-2xl md:text-3xl font-bold mb-6 text-center"
+        style={{ color: primaryColor }}
+      >
         ESP32 Attendance System
       </h1>
 
-      <div className="flex flex-col md:flex-row gap-6">
+      <div className="flex flex-col md:flex-row gap-4">
         {/* Enroll Section */}
-        <div className={`flex-1 shadow-lg rounded-2xl p-6 border ${cardBorder} ${cardBg}`}>
-          <h2 className="text-xl font-semibold mb-4" style={{ color: darkMode ? "#fff" : "#000" }}>
-            Enroll Student
-          </h2>
+        <div
+          className={`flex-1 shadow-md rounded-xl p-4 border ${cardBorder} ${cardBg}`}
+        >
+          <h2 className="text-lg font-semibold mb-3">Enroll Student</h2>
 
-          <div className="space-y-3">
-            {["Name", "RegNum", "IndexNum", "Email"].map((label, i) => {
-              const setter = [setName, setRegNum, setIndexNum, setEmail][i];
-              const value = [name, regNum, indexNum, email][i];
+          <div className="space-y-2">
+            {["Name", "RegNum"].map((label, i) => {
+              const setter = [setName, setRegNum][i];
+              const value = [name, regNum][i];
               return (
                 <input
                   key={i}
-                  type={label === "Email" ? "email" : "text"}
+                  type="text"
                   placeholder={label}
                   value={value}
                   onChange={(e) => setter(e.target.value)}
                   disabled={loading}
-                  className={`w-full px-4 py-2 rounded-lg border ${cardBorder} ${inputBg} ${inputText} ${placeholderText} focus:ring-2 focus:ring-[#02c986] focus:border-[#02c986] transition-all duration-200`}
+                  className={`w-full px-3 py-2 rounded-md border ${cardBorder} ${inputBg} ${inputText} ${placeholderText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
                 />
               );
             })}
           </div>
 
-          {error && <div className="text-red-400 mt-2 text-sm">{error}</div>}
+          {error && <div className="text-red-400 mt-1 text-sm">{error}</div>}
 
-          <div className="flex items-center justify-between mt-4">
-            <button
-              onClick={startEnroll}
-              disabled={loading || espStatus !== "ONLINE"}
-              className={`px-6 py-2 rounded-xl font-semibold text-white transition-all duration-200 ${
-                loading || espStatus !== "ONLINE"
-                  ? "bg-gray-500 cursor-not-allowed"
-                  : "bg-gradient-to-r from-[#01996f] to-[#02d88f] hover:from-[#02d88f] hover:to-[#01996f] shadow-lg"
-              }`}
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-4 border-t-4 border-t-green-500 border-gray-200 rounded-full animate-spin"></div>
-                  Enrolling...
-                </div>
-              ) : (
-                "Start Enroll"
-              )}
-            </button>
+          <div className="flex items-center justify-between mt-5">
+            {/* Enroll Button */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={startEnroll}
+                disabled={loading || espStatus !== "ONLINE"}
+                className={`px-4 py-1 rounded-lg font-semibold text-white transition-all duration-200 ${
+                  loading || espStatus !== "ONLINE"
+                    ? "bg-gray-500 cursor-not-allowed"
+                    : "bg-gradient-to-r from-[#01996f] to-[#02d88f] hover:from-[#02d88f] hover:to-[#01996f]"
+                }`}
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-4 h-4 border-2 border-t-2 border-t-green-500 border-gray-200 rounded-full animate-spin"></div>
+                    Enrolling...
+                  </div>
+                ) : (
+                  "Enroll"
+                )}
+              </button>
 
-            <div className="flex items-center gap-2">
+              {/* Cancel Button */}
+              <button
+                onClick={async () => {
+                  try {
+                    await set(ref(database, "/systemState"), "VERIFY");
+                    setLoading(false);
+                    setError("");
+                    setMessages((prev) => [...prev, "Enrollment cancelled"]);
+                  } catch (err) {
+                    console.error("Failed to cancel enrollment:", err);
+                    setError("Failed to cancel enrollment.");
+                  }
+                }}
+                disabled={!loading} // Only active during enrollment
+                className={`px-4 py-1 rounded-lg font-semibold text-white transition-all duration-200 ${
+                  !loading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-red-500 hover:bg-red-600"
+                }`}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* ESP32 Status */}
+            <div className="flex items-center gap-2 text-sm">
               <span
-                className={`w-3.5 h-3.5 border-2 border-white rounded-full ml-2 mt-2 align-middle ${
-                  espStatus === "ONLINE" ? "bg-[#00ff88] animate-pulse" : "bg-red-500"
+                className={`w-3 h-3 rounded-full border-2 border-white ${
+                  espStatus === "ONLINE"
+                    ? "bg-[#00ff88] animate-pulse"
+                    : "bg-red-500"
                 }`}
                 style={{
                   boxShadow:
                     espStatus === "ONLINE"
-                      ? `0 0 8px ${primaryColor}`
-                      : "0 0 8px red",
+                      ? `0 0 6px ${primaryColor}`
+                      : "0 0 6px red",
                 }}
               ></span>
-              <span className="text-sm font-medium" style={{ color: darkMode ? "#fff" : "#000" }}>
-                {espStatus}
-              </span>
+              <span>{espStatus}</span>
             </div>
           </div>
         </div>
 
-        {/* Enrollment Messages */}
-        <div className={`flex-1 shadow-lg rounded-2xl md:p-6 border ${cardBorder} ${cardBg}`}>
-          <h2 className="text-xl font-semibold text-center md:text-start my-3" style={{ color: darkMode ? "#fff" : "#000" }}>
-            Enrollment Messages
-          </h2>
-          <div className={`h-64 overflow-y-auto p-3 md:rounded-lg border ${cardBorder} ${messageBg} ${messageText} font-mono text-sm`}>
+        {/* Messages Section */}
+        <div
+          className={`flex-1 shadow-md rounded-xl p-4 border ${cardBorder} ${cardBg}`}
+        >
+          <h2 className="text-lg font-semibold mb-2">Enrollment Messages</h2>
+          <div
+            className={`h-48 overflow-y-auto p-2 rounded-md border ${cardBorder} ${messageBg} ${messageText} font-mono text-sm`}
+          >
             {messages.length === 0 ? (
-              <div className="text-gray-400 italic">No messages yet...</div>
+              <div className="text-gray-400 italic text-xs">
+                No messages yet...
+              </div>
             ) : (
-              messages.map((msg, index) => (
-                <div key={index} className="mb-1">
+              messages.map((msg, idx) => (
+                <div key={idx} className="mb-1 text-sm">
                   {msg}
                 </div>
               ))

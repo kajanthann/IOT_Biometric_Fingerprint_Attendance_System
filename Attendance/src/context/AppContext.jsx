@@ -106,7 +106,7 @@ const AppContextProvider = ({ children }) => {
 
     // Timer to mark OFFLINE if no change in 5s
     const interval = setInterval(() => {
-      if (lastChangeTime && Date.now() - lastChangeTime > 10000) {
+      if (lastChangeTime && Date.now() - lastChangeTime > 3000) {
         setEspStatus("OFFLINE");
       }
     }, 1000); // check every 1 second
