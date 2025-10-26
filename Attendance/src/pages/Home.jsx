@@ -65,7 +65,7 @@ const Home = () => {
   return (
     <div className={`min-h-screen flex flex-col ${bg} ${textColor}`}>
       {/* Hero Section */}
-      <header className={`flex flex-col lg:flex-row rounded-3xl items-center justify-between shadow-lg m-10 overflow-hidden ${darkMode ? "bg-gradient-to-r from-gray-800 to-gray-900" : "bg-[#42d99d]"}`}>
+      <header className={`flex flex-col lg:flex-row rounded-3xl items-center justify-between shadow-lg m-10 overflow-hidden ${darkMode ? "bg-gradient-to-r from-gray-800 to-gray-900" : "bg-[#01996f]"}`}>
         <div className="lg:w-1/2 text-center md:text-left px-4 md:px-10 space-y-5">
           <motion.h1
             initial={{ x: -100, opacity: 0 }}
@@ -103,7 +103,7 @@ const Home = () => {
                   <div className={`${cardBg} p-1.5 md:p-3 rounded-full flex items-center justify-center shadow-md`}>
                     {step.icon}
                   </div>
-                  <span className={`${cardText} font-medium`}>{step.text}</span>
+                  <span className={`text-white font-medium`}>{step.text}</span>
                 </motion.div>
               );
             })}

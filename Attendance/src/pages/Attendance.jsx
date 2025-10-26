@@ -301,7 +301,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
               <tr>
                 <th className="py-1 px-2 border">#</th>
                 <th className="py-1 px-2 border">Name</th>
-                <th className="py-1 px-2 border">Index</th>
+                <th className="py-1 px-2 border">RegNum</th>
                 {monthDays.map((day, idx) => (
                   <th key={idx} className="py-1 px-1 sm:px-2 border text-[10px] sm:text-xs">
                     {day.dayName}
@@ -317,7 +317,7 @@ const Attendance = ({ day, timeSlots = [] }) => {
                 <tr key={student.fingerprintId || idx} className={hoverBg}>
                   <td className="py-1 px-2 border">{idx + 1}</td>
                   <td className="py-1 px-2 border">{student.name}</td>
-                  <td className="py-1 px-2 border">{student.indexNum}</td>
+                  <td className="py-1 px-2 border">{student.regNum}</td>
                   {student.dailyAttendance.map((att, dIdx) => {
                     const cellKey = `${student.id}-${dIdx}`;
                     const showTime = showTimesMap[cellKey] || false;

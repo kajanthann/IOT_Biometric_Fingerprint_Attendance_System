@@ -1,146 +1,172 @@
-# 📌 ESP32 Fingerprint Attendance System
+# 📌 ESP32 Fingerprint Attendance System v2.0
 
-This project is an **IoT-based Attendance Management System** built using **ESP32**, **AS608 Fingerprint Sensor**, **Adafruit OLED Display**, and **Firebase Realtime Database**.  
-It allows students to **enroll fingerprints** and later verify them for **attendance logging**. Data is stored in Firebase with timestamps for tracking.
+## 📖 Overview
+An intelligent IoT-based attendance management system combining biometric authentication with cloud connectivity. Perfect for educational institutions and organizations seeking to automate attendance tracking securely and efficiently.
 
----
+## ⭐ Key Features
+### Hardware Features
+- 🔐 **Biometric Authentication** via AS608 Fingerprint Sensor
+- 📱 **OLED Display** for real-time user feedback and status
+- 💡 **Dual LED Indicators** for operation status
+- 🔌 **Offline Capability** with EEPROM storage
+- ⚡ **Power-Efficient Design** with sleep mode support
 
-## 🚀 Features
-- 🔑 **Fingerprint Enrollment** (AS608 sensor)
-- 👆 **Fingerprint Verification**
-- 🖥️ **OLED Display (SH1107)** for user feedback
-- 📶 **Wi-Fi Enabled ESP32** for cloud communication
-- ☁️ **Firebase Realtime Database** integration
-- ⏰ **NTP Timestamping** for accurate attendance logs
-- ✅ **LED Indicators** for success (Green) and failure (Red)
-- 📊 **Web Dashboard** for viewing attendance, student management, and timetable
+### Software Features
+- 🌐 **Real-time Firebase Integration**
+- 📊 **React Web Dashboard**
+  - Student Management
+  - Attendance Tracking
+  - Timetable Integration
+- 🔒 **Secure Authentication**
+- 📱 **Responsive Design**
 
----
+## 🛠️ Technical Requirements
 
-## 🛠️ Hardware Requirements
-- **ESP32 Development Board**
-- **AS608 Fingerprint Sensor**
-- **Adafruit SH1107 OLED Display (128x128)**
-- **LEDs (Green & Red) + Resistors**
-- **Breadboard + Jumper wires**
-- Wi-Fi connection
+### Hardware Components
+| Component | Specification | Purpose |
+|-----------|---------------|----------|
+| ESP32 | Any ESP32 Dev Board | Main Controller |
+| AS608 | Optical Fingerprint Sensor | Biometric Capture |
+| Display | SH1107 OLED 128x128 | User Interface |
+| LEDs | 2x (Green/Red) + 220Ω | Status Indicators |
+| Power | 5V USB/External Supply | Power Source |
 
----
+### Software Requirements
+- **Development Environment**
+  - VS Code + PlatformIO
+  - Node.js v16+ & npm
+  - Git
+- **Cloud Services**
+  - Firebase Project
+  - Google Cloud Platform (optional)
 
-## 🔌 Hardware Connections
+## 📡 System Architecture
 
-| Component                | ESP32 Pin      | Notes                        |
-|--------------------------|----------------|------------------------------|
-| AS608 Fingerprint Sensor | RX → GPIO 18   | ESP32 UART1 RX (finger TX)   |
-|                          | TX → GPIO 19   | ESP32 UART1 TX (finger RX)   |
-|                          | VCC → 3.3V     | Power                        |
-|                          | GND → GND      | Ground                       |
-| OLED Display (SH1107)    | SDA → GPIO 21  | I2C Data                     |
-|                          | SCL → GPIO 22  | I2C Clock                    |
-|                          | VCC → 3.3V     | Power                        |
-|                          | GND → GND      | Ground                       |
-| Green LED                | Anode → GPIO 2 | Success indicator            |
-| Red LED                  | Anode → GPIO 4 | Failure indicator            |
-| LEDs Cathode             | GND            | Use resistor (220Ω)          |
+### Hardware Layout
+```
+ESP32 Development Board
+├── AS608 Sensor (UART)
+│   ├── TX → GPIO 19
+│   └── RX → GPIO 18
+├── OLED Display (I2C)
+│   ├── SDA → GPIO 21
+│   └── SCL → GPIO 22
+└── Status LEDs
+    ├── Green → GPIO 2
+    └── Red → GPIO 4
+```
 
-**Wi-Fi:**  
-Connect ESP32 to a 2.4GHz Wi-Fi network.
+### Software Architecture
+```
+Web Dashboard (React/Vite)
+└── Firebase RTDB
+    └── ESP32 Controller
+        ├── Local EEPROM
+        ├── Fingerprint DB
+        └── Status Display
+```
 
-**Power:**  
-Use USB or external 5V supply for ESP32.
+## 🚀 Quick Start Guide
 
-**Wiring Notes:**
-- Use a breadboard and jumper wires for prototyping.
-- Ensure correct voltage levels for all components.
-- Place current-limiting resistors (220Ω) in series with LEDs.
+### 1. Hardware Setup
+1. Connect components following wiring diagram
+2. Verify power connections
+3. Test basic functionality
 
----
+### 2. ESP32 Firmware
+```bash
+# Clone repository
+git clone https://github.com/kajanthann/esp32-attendance.git
+
+# Install PlatformIO CLI (if needed)
+pip install platformio
+
+# Build & Upload
+cd esp32-attendance
+pio run -t upload
+```
+
+### 3. Web Dashboard
+```bash
+# Setup dashboard
+cd Attendance
+npm install
+npm run dev
+
+# Access dashboard
+open http://localhost:5173
+```
 
 ## 📂 Project Structure
-
 ```
 IOT/
-├── Attendance/           # React web dashboard
-│   ├── src/              # React source code
-│   ├── public/           # Static assets
-│   ├── package.json      # Dashboard dependencies
-│   └── ...               # Other dashboard files
-├── esp32-attendance/     # ESP32 firmware (PlatformIO)
-│   ├── src/              # Main firmware code (main.cpp)
-│   ├── include/          # Header files
-│   ├── lib/              # Custom libraries
-│   ├── platformio.ini    # PlatformIO config
-│   └── ...               # Other firmware files
-└── README.md             # Project documentation
+├── docs/                    # Documentation
+├── hardware/               # Circuit diagrams
+├── esp32-attendance/       # ESP32 Firmware
+│   ├── src/
+│   │   ├── main.cpp       # Main program
+│   │   └── config.h       # Configuration
+│   └── platformio.ini
+└── Attendance/            # Web Dashboard
+    ├── src/
+    │   ├── components/    # React components
+    │   ├── pages/        # Route pages
+    │   └── utils/        # Helpers
+    └── public/           # Static assets
 ```
 
----
+## 🔧 Configuration
 
-## ⚡ ESP32 Firmware Overview
+### ESP32 Settings
+```cpp
+// secrets.h
+#define WIFI_SSID "your_ssid"
+#define WIFI_PASS "your_password"
+#define FIREBASE_URL "your_firebase_url"
+```
 
-- Written in C++ using Arduino framework ([src/main.cpp](esp32-attendance/src/main.cpp))
-- Handles fingerprint enrollment and verification via AS608 sensor
-- Displays status and messages on OLED
-- Connects to Wi-Fi and syncs data with Firebase
-- Stores student records in EEPROM for persistence
-- Uses NTP for accurate timestamps
+### Firebase Setup
+1. Create new Firebase project
+2. Enable Realtime Database
+3. Configure security rules
+4. Add credentials to `secrets.h`
 
----
+## 📊 Dashboard Features
+- Student Registration & Management
+- Real-time Attendance Monitoring
+- Timetable Management
+- Analytics Dashboard
+- Admin Settings
 
-## 🌐 Web Dashboard Overview
+## 🔍 Troubleshooting
 
-- Built with React + Vite ([Attendance/src](Attendance/src))
-- Connects to Firebase for real-time data
-- Admin login for secure student registration
-- View attendance logs, student details, modules, and timetable
-- CSV timetable import from Google Sheets
-- Responsive UI with Tailwind CSS
+### Common Issues
+1. **Fingerprint Enrollment Fails**
+   - Clean sensor surface
+   - Verify finger placement
+   - Check serial connection
 
----
+2. **WiFi Connection Issues**
+   - Verify credentials
+   - Check signal strength
+   - Reset ESP32
 
-## 🚦 How It Works
+3. **Dashboard Access Problems**
+   - Clear browser cache
+   - Check Firebase rules
+   - Verify admin credentials
 
-1. **Enrollment:** Admin registers student details via dashboard. ESP32 receives data and enrolls fingerprint.
-2. **Verification:** Student scans fingerprint. ESP32 matches and logs attendance to Firebase.
-3. **Dashboard:** Attendance and student data are visualized in real-time.
+## 🤝 Contributing
+1. Fork repository
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Submit pull request
 
----
+## 📄 License
+MIT License - See [LICENSE](LICENSE)
 
-## 🏁 Getting Started
-
-### ESP32 Firmware
-
-1. Install [PlatformIO](https://platformio.org/) in VS Code.
-2. Open `esp32-attendance/` folder.
-3. Add your Wi-Fi and Firebase credentials in `src/secrets.h`.
-4. Connect hardware as per requirements.
-5. Build and upload firmware to ESP32.
-
-### Web Dashboard
-
-1. Open `Attendance/` folder.
-2. Install dependencies:
-   ```sh
-   npm install
-   ```
-3. Start development server:
-   ```sh
-   npm run dev
-   ```
-4. Access dashboard at `http://localhost:5173`
-
----
-
-## 📖 Documentation
-
-- [ESP32 Firmware](esp32-attendance/src/main.cpp)
-- [React Dashboard](Attendance/src/App.jsx)
-- [PlatformIO Unit Testing](esp32-attendance/test/)
-- [Custom Libraries](esp32-attendance/lib/)
-- [Header Files](esp32-attendance/include/)
-
----
-
-## 📝 License
-
-MIT License. See [LICENSE](LICENSE) for details.
+## 📞 Support
+- GitHub Issues: [Project Issues](https://github.com/kajanthann/esp32-attendance/issues)
+- Email: support@example.com
+- Documentation: [Wiki](https://github.com/kajanthann/esp32-attendance/wiki)
