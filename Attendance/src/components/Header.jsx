@@ -28,7 +28,7 @@ const Header = ({ token, setToken }) => {
             transition={{ type: "spring", stiffness: 300 }}
           >
             F<span className="text-sky-500">O</span>C
-            <span className="text-xs ml-[-10px] mt-1 align-middle text-slate-400 uppercase tracking-widest font-semibold">
+            <span className="text-xs ml-[-10px] md:mt-1 align-middle text-slate-400 uppercase tracking-widest font-semibold">
               Attendance
             </span>
             {/* LED Status */}
@@ -40,7 +40,7 @@ const Header = ({ token, setToken }) => {
                     : {}
                 }
                 transition={{ repeat: Infinity, duration: 1.5 }}
-                className="w-3.5 h-3.5 border-2 border-[#0b1120] rounded-full ml-1 mt-1.5"
+                className="w-3.5 h-3.5 border-2 border-[#0b1120] rounded-full ml-1 md:mt-1.5"
                 style={{
                   backgroundColor:
                     espStatus === "ONLINE" ? "#10b981" : "#ef4444",
