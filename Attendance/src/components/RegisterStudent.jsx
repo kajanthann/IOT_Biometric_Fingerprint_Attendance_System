@@ -166,7 +166,7 @@ const RegisterStudent = ({ onClose }) => {
               <button
                 onClick={startEnroll}
                 disabled={loading || espStatus !== "ONLINE"}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-white transition-all duration-300 shadow-lg ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 rounded-full py-2 font-bold text-white transition-all duration-300 shadow-lg ${
                   loading || espStatus !== "ONLINE"
                     ? "bg-slate-800 cursor-not-allowed text-slate-500 shadow-none border border-slate-700"
                     : "bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 shadow-sky-900/50 border border-sky-400/30 hover:scale-105"
@@ -180,7 +180,7 @@ const RegisterStudent = ({ onClose }) => {
                 ) : (
                   <>
                     <Fingerprint size={18} />
-                    Scan Finger
+                    Scan <div className="hidden md:block">Finger</div> 
                   </>
                 )}
               </button>
@@ -188,7 +188,7 @@ const RegisterStudent = ({ onClose }) => {
               <button
                 onClick={cancelEnroll}
                 disabled={!loading}
-                className={`flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold transition-all duration-300 ${
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-full font-bold transition-all duration-300 ${
                   !loading
                     ? "bg-black/20 text-slate-600 cursor-not-allowed border border-slate-800/50"
                     : "bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 shadow-lg shadow-rose-900/20"
@@ -204,7 +204,7 @@ const RegisterStudent = ({ onClose }) => {
                   className={`w-2.5 h-2.5 rounded-full ${
                     espStatus === "ONLINE"
                       ? "bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse"
-                      : "bg-rose-500 shadow-[0_0_10px_#f43f5e]"
+                      : "bg-rose-500 shadow-[0_0_10px_#f43f5e] animate-pulse"
                   }`}
                 ></span>
                 <span

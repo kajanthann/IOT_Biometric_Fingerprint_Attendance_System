@@ -66,40 +66,48 @@ const ModuleDetails = () => {
           animate={{ opacity: 1, y: 0 }}
           className="bg-[#111827]/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 mb-10 shadow-2xl relative overflow-hidden"
         >
-          <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-sky-500 to-indigo-500"></div>
+          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-sky-500 to-indigo-500"></div>
 
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pl-4">
-            <div className="flex items-center gap-5 border-l-0 pl-0">
-              <div className="hidden sm:flex p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-sky-400">
-                <BookOpen size={32} />
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            {/* Left Section */}
+            <div className="flex items-start sm:items-center gap-4 w-full lg:w-auto">
+              {/* Responsive Icon */}
+              <div className="p-3 sm:p-4 bg-sky-500/10 border border-sky-500/20 rounded-2xl text-sky-400">
+                <BookOpen className="w-6 h-6 sm:w-8 sm:h-8" />
               </div>
-              <div>
-                <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight mb-2">
+
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl md:text-3xl font-semibold text-white tracking-tight mb-1 break-words">
                   {moduleName}
                 </h1>
-                <p className="text-slate-400 font-medium flex items-center gap-2">
-                  <Users size={16} /> Module specific attendance records
+
+                <p className="text-slate-400 text-xs sm:text-sm flex items-center gap-2">
+                  <Users size={14} />
+                  Module specific attendance records
                 </p>
               </div>
             </div>
 
-            {/* Schedule Pills */}
+            {/* Schedule Section */}
             {moduleData.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3 bg-black/40 p-3 rounded-2xl border border-slate-700/50">
-                <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 mr-2">
-                  Schedule:
-                </h2>
-                {moduleData.map((data, idx) => (
-                  <span
-                    key={idx}
-                    className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
-                  >
-                    <Calendar size={14} className="text-indigo-400/70" />{" "}
-                    {data.day}
-                    <Clock size={14} className="ml-1 text-sky-400/70" />{" "}
-                    {data.time}
-                  </span>
-                ))}
+              <div className="w-full lg:w-auto">
+                <div className="flex items-center gap-3 overflow-x-auto lg:overflow-visible bg-black/40 pl-2 rounded-lg border border-slate-700/50 scrollbar-hide">
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                    Schedule:
+                  </h2>
+
+                  {moduleData.map((data, idx) => (
+                    <span
+                      key={idx}
+                      className="flex-shrink-0 flex items-center gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 whitespace-nowrap"
+                    >
+                      <Calendar size={14} className="text-indigo-400/70" />
+                      {data.day}
+                      <Clock size={14} className="ml-1 text-sky-400/70" />
+                      {data.time}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -112,12 +120,12 @@ const ModuleDetails = () => {
           transition={{ delay: 0.1 }}
           className="bg-[#111827]/80 backdrop-blur-xl shadow-2xl rounded-3xl p-8 border border-slate-700/50"
         >
-          <div className="flex items-center gap-3 mb-8">
+          <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
               <Users size={24} />
             </div>
             <h2 className="text-2xl font-bold tracking-wide text-white">
-              Course Attendance
+              Module Attendance
             </h2>
           </div>
 

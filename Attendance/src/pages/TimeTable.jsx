@@ -13,15 +13,15 @@ const TimeTable = () => {
 
   return (
     <div
-      className={`px-4 sm:px-8 lg:px-16 mx-auto py-8 ${bg} ${textColor} min-h-screen relative`}
+      className={`px-4 sm:px-8 lg:px-16 mx-auto py-8 ${bg} ${textColor} relative`}
     >
       {/* Subtle background glow */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-sky-900/5 rounded-full blur-[100px] pointer-events-none"></div>
 
       {/* Title */}
       <h1 className="text-xl md:text-3xl font-extrabold mb-8 text-center tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400 z-10">
-  Semester 5 CSE Time Table
-</h1>
+        Semester 5 CSE Time Table
+      </h1>
 
       {/* Loading Spinner */}
       {loading ? (
@@ -36,30 +36,35 @@ const TimeTable = () => {
           No timetable data found.
         </p>
       ) : (
-        <div className="overflow-x-auto relative z-10 border border-sky-700 rounded-2xl">
-          <table className="w-full border-collapse shadow-2xl rounded-xl overflow-hidden text-sm md:text-base bg-black/20 border border-slate-700/50 backdrop-blur-sm">
+        <div className="overflow-x-auto relative z-10 rounded-xl border border-slate-700/50 shadow-xl">
+          <table className="w-full border-collapse text-xs md:text-sm bg-slate-900/40 backdrop-blur-md">
             <tbody>
-              {data.map((row, idx) => (
+              {data.slice(1).map((row, idx) => (
                 <tr
                   key={idx}
                   className={`transition-colors duration-200 ${
                     idx === 0
-                      ? "bg-[#111827] text-sky-400 font-bold uppercase tracking-wider text-xs" // Header row styling
-                      : `${rowBg(idx - 1)} hover:bg-slate-700/50` // Data row styling
+                      ? "bg-slate-800 text-sky-400 font-semibold uppercase text-[10px] md:text-xs tracking-wider"
+                      : "hover:bg-slate-800/60"
                   }`}
                 >
                   {Object.values(row).map((cell, cellIdx) => (
                     <td
                       key={cellIdx}
-                      className={`px-4 py-3 md:py-4 border ${borderColor} text-center ${
-                        idx === 0
-                          ? "border-b border-sky-500/30 font-semibold" // Header cells
-                          : cellIdx === 0
-                            ? "text-slate-400 font-medium bg-[#111827]/40" // Time column
-                            : "text-slate-200" // Normal data cells
-                      }`}
+                      className={`
+                px-2 py-3 md:px-4 md:py-4 
+                border border-slate-700/50 
+                text-center align-middle
+                ${
+                  cellIdx === 0
+                    ? "sticky left-[-2px] bg-slate-900 font-semibold text-sky-300"
+                    : "text-slate-300"
+                }
+              `}
                     >
-                      {cell || "-"}
+                      <div className="min-w-[90px] md:min-w-[120px] break-words">
+                        {cell || "-"}
+                      </div>
                     </td>
                   ))}
                 </tr>
