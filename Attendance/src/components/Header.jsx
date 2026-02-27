@@ -65,7 +65,7 @@ const Header = ({ token, setToken }) => {
                 `px-4 py-2 rounded-full transition-all duration-300 ${
                   isActive
                     ? "bg-sky-500/10 text-sky-400 shadow-[inset_0_0_10px_rgba(56,189,248,0.2)]"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    : "text-white hover:bg-white/5"
                 }`
               }
             >

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import heroImg from "../assets/hero2.png";
+import img from "../assets/home.png";
 import {
   Fingerprint,
   Wifi,
@@ -13,6 +14,7 @@ import {
   Database,
   Cpu,
 } from "lucide-react";
+import Hero from "../components/Hero";
 
 const Home = () => {
   const [isMedium, setIsMedium] = useState(false);
@@ -28,22 +30,27 @@ const Home = () => {
     {
       icon: <Fingerprint className="w-6 h-6 text-sky-400" />,
       text: "Scan Fingerprint",
+      bg: "bg-sky-400/10", // light sky background
     },
     {
       icon: <Wifi className="w-6 h-6 text-indigo-400" />,
       text: "ESP32 Sends Data",
+      bg: "bg-indigo-400/10", // light indigo background
     },
     {
       icon: <Lock className="w-6 h-6 text-rose-400" />,
       text: "Authentication",
+      bg: "bg-rose-400/10", // light rose background
     },
     {
       icon: <BarChart className="w-6 h-6 text-emerald-400" />,
       text: "Dashboard Logging",
+      bg: "bg-emerald-400/10", // light emerald background
     },
     {
       icon: <Users className="w-6 h-6 text-amber-400" />,
       text: "Attendance Recorded",
+      bg: "bg-amber-400/10", // light amber background
     },
   ];
 
@@ -126,10 +133,10 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-200 selection:bg-sky-500/30 font-sans">
       {/* Hero Section */}
-      <header className="relative mt-8 mx-4 md:mx-10 rounded-3xl overflow-hidden border border-white/5 shadow-2xl bg-[#111827]">
+      <header className="relative mt-8 mx-4 md:mx-15 rounded-3xl overflow-hidden border border-white/5 shadow-2xl bg-[#111827]">
         {/* Glow Effects */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-sky-600/10 rounded-full blur-[100px] pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-sky-500/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none"></div>
 
         <div className="flex flex-col lg:flex-row items-center justify-between relative z-10">
           <div className="lg:w-1/2 p-8 md:p-12 space-y-8">
@@ -138,9 +145,6 @@ const Home = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="inline-block px-4 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-bold tracking-widest uppercase mb-4">
-                Version 2.0 Live
-              </span>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight">
                 Smart Attendance <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400">
@@ -162,22 +166,39 @@ const Home = () => {
 
             {/* Hero Steps Grid */}
             <motion.div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-              {heroSteps.map((step, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.4 + idx * 0.1, type: "spring" }}
-                  className="flex items-center space-x-3 bg-white/5 backdrop-blur-md border border-white/5 p-3 rounded-2xl hover:bg-white/10 transition-colors"
-                >
-                  <div className="p-2 bg-black/40 rounded-xl shadow-inner">
-                    {step.icon}
-                  </div>
-                  <span className="text-sm font-semibold text-slate-200">
-                    {step.text}
-                  </span>
-                </motion.div>
-              ))}
+              {heroSteps.map((step, idx) => {
+                // Determine light background based on icon color
+                let bgColor = "";
+                if (step.icon.props.className.includes("text-sky-400"))
+                  bgColor = "bg-sky-400/20";
+                else if (step.icon.props.className.includes("text-indigo-400"))
+                  bgColor = "bg-indigo-400/20";
+                else if (step.icon.props.className.includes("text-rose-400"))
+                  bgColor = "bg-rose-400/20";
+                else if (step.icon.props.className.includes("text-emerald-400"))
+                  bgColor = "bg-emerald-400/20";
+                else if (step.icon.props.className.includes("text-amber-400"))
+                  bgColor = "bg-amber-400/20";
+
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.4 + idx * 0.1, type: "spring" }}
+                    className="flex items-center space-x-3 bg-white/1 backdrop-blur-md border border-white/5 p-1 rounded-2xl hover:bg-white/10 transition-colors shadow-lg"
+                  >
+                    <div
+                      className={`p-2 rounded-xl shadow-inner flex items-center justify-center ${bgColor}`}
+                    >
+                      {step.icon}
+                    </div>
+                    <span className="text-sm font-semibold text-slate-200">
+                      {step.text}
+                    </span>
+                  </motion.div>
+                );
+              })}
             </motion.div>
           </div>
 
@@ -187,14 +208,11 @@ const Home = () => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
           >
-            {/* Gradient overlay for blending the image into the dark theme gracefully */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#111827] via-transparent to-transparent z-10 lg:hidden"></div>
-            <div className="absolute inset-0 bg-gradient-to-r from-[#111827] via-transparent to-transparent z-10 hidden lg:block"></div>
 
             <img
-              src={heroImg}
+              src={img}
               alt="System Interface Demo"
-              className="w-full object-cover object-left h-full lg:min-h-[600px] opacity-80"
+              className="w-full object-cover object-left h-[600px]"
               style={{ filter: "brightness(0.9) contrast(1.1)" }}
             />
           </motion.div>
