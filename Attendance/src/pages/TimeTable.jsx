@@ -36,7 +36,7 @@ const TimeTable = () => {
           No timetable data found.
         </p>
       ) : (
-        <div className="overflow-x-auto relative z-10">
+        <div className="overflow-x-auto relative z-10 border border-sky-700 rounded-2xl">
           <table className="w-full border-collapse shadow-2xl rounded-xl overflow-hidden text-sm md:text-base bg-black/20 border border-slate-700/50 backdrop-blur-sm">
             <tbody>
               {data.map((row, idx) => (
