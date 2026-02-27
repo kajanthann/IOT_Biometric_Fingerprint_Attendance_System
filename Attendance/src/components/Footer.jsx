@@ -1,20 +1,13 @@
-import React, { useContext } from "react";
-import { AppContext } from "../context/AppContext";
+import React from "react";
 
 const Footer = () => {
-  const { darkMode } = useContext(AppContext);
-  const primaryColor = "#01996f";
-
-  const bgClass = darkMode ? "bg-gray-900" : "bg-white";
-  const textClass = darkMode ? "text-white" : "text-black";
-
   return (
-    <footer
-      className={`${bgClass} ${textClass} text-center py-3 w-full shadow-lg border-t`}
-      style={{ borderTopColor: primaryColor }}
-    >
-      <p className="text-sm">
-        © {new Date().getFullYear()} Faculty of Computing. All rights reserved.
+    <footer className="bg-[#0b1120] border-t border-sky-500/10 text-center py-6 w-full mt-auto relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-t from-sky-900/5 to-transparent pointer-events-none"></div>
+      <p className="text-slate-500 text-sm font-medium relative z-10">
+        © {new Date().getFullYear()}{" "}
+        <span className="text-sky-400/80">Faculty of Computing</span>. All
+        rights reserved.
       </p>
     </footer>
   );

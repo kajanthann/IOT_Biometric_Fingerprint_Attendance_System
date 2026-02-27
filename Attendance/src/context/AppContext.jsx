@@ -12,19 +12,10 @@ const AppContextProvider = ({ children }) => {
   const [data, setData] = useState([]); // raw CSV data if needed
   const [loading, setLoading] = useState(true);
   const [espStatus, setEspStatus] = useState("OFFLINE"); // NEW: ESP32 status
-  const [darkMode, setDarkMode] = useState(
-    localStorage.getItem("theme") === "dark"
-  );
-
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [darkMode]);
+    // Force dark mode on the whole document
+    document.documentElement.classList.add("dark");
+  }, []);
 
   const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
   const csvUrl = import.meta.env.VITE_GOOGLESHEET;
@@ -62,7 +53,7 @@ const AppContextProvider = ({ children }) => {
             mod.toLowerCase() !== "break" &&
             mod !== "-" &&
             !["monday", "tuesday", "wednesday", "thursday", "friday"].includes(
-              mod.toLowerCase()
+              mod.toLowerCase(),
             )
           ) {
             tempModules.push({ name: mod.replace(/\n/g, " "), day, time });
@@ -159,7 +150,7 @@ const AppContextProvider = ({ children }) => {
   const groupedStudents = (
     monthDays,
     search = "",
-    attendanceFilter = "all"
+    attendanceFilter = "all",
   ) => {
     const studentMap = {};
     students.forEach((att) => {
@@ -183,7 +174,7 @@ const AppContextProvider = ({ children }) => {
               (d) =>
                 d.getDate() === day.date.getDate() &&
                 d.getMonth() === day.date.getMonth() &&
-                d.getFullYear() === day.date.getFullYear()
+                d.getFullYear() === day.date.getFullYear(),
             );
 
           if (tsForDay.length > 0) {
@@ -193,8 +184,8 @@ const AppContextProvider = ({ children }) => {
                   d.toLocaleTimeString("en-US", {
                     hour: "2-digit",
                     minute: "2-digit",
-                  })
-                )
+                  }),
+                ),
               ),
             ];
             return `P (${uniqueTimes.join(", ")})`;
@@ -202,7 +193,7 @@ const AppContextProvider = ({ children }) => {
         });
 
         const presentCount = dailyAttendance.filter((a) =>
-          a.startsWith("P")
+          a.startsWith("P"),
         ).length;
         const percentage = (
           (presentCount / dailyAttendance.length) *
@@ -214,7 +205,7 @@ const AppContextProvider = ({ children }) => {
       .filter(
         (student) =>
           student.name.toLowerCase().includes(search.toLowerCase()) ||
-          student.indexNum?.toLowerCase().includes(search.toLowerCase())
+          student.indexNum?.toLowerCase().includes(search.toLowerCase()),
       )
       .filter((student) => {
         if (attendanceFilter === "above80") return student.percentage >= 80;
@@ -236,7 +227,7 @@ const AppContextProvider = ({ children }) => {
         .filter((d) => d.date >= start && d.date <= end);
 
       const presentCount = countInRange.filter((d) =>
-        d.status.startsWith("P")
+        d.status.startsWith("P"),
       ).length;
       const totalCount = countInRange.length;
       percentMap[student.id] =
@@ -260,8 +251,6 @@ const AppContextProvider = ({ children }) => {
     espStatus,
     groupedStudents,
     calculateCustomPercentage,
-    setDarkMode,
-    darkMode,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

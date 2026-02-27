@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+@layer base {
+  body {
+    @apply bg-[#0f172a] text-slate-200 antialiased selection:bg-sky-500/30;
+  }
+}
+
 ::-webkit-scrollbar {
-    display: none;
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5); /* slate-900/50 equivalent */
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.5); /* slate-700/50 equivalent */
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.5); /* slate-600/50 equivalent */
 }

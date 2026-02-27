@@ -2,28 +2,23 @@ import React, { useState, useEffect, useContext } from "react";
 import { ref, set, onValue, off } from "firebase/database";
 import { database } from "../firebase";
 import { AppContext } from "../context/AppContext";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  UserPlus,
+  Clipboard,
+  XOctagon,
+  Loader2,
+  Fingerprint,
+} from "lucide-react";
 
-const RegisterStudent = () => {
+const RegisterStudent = ({ onClose }) => {
   const [name, setName] = useState("");
   const [regNum, setRegNum] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const { espStatus, darkMode } = useContext(AppContext);
-  const primaryColor = "#02c986";
-
-  const bgMain = darkMode ? "bg-gray-900" : "bg-white";
-  const textMain = darkMode ? "text-gray-100" : "text-gray-900";
-  const cardBg = darkMode ? "bg-gray-800" : "bg-white";
-  const cardBorder = darkMode ? "border-gray-700" : "border-gray-300";
-  const inputBg = darkMode ? "bg-gray-700/70" : "bg-gray-100";
-  const inputText = darkMode ? "text-white" : "text-gray-900";
-  const placeholderText = darkMode
-    ? "placeholder-gray-400"
-    : "placeholder-gray-500";
-  const messageBg = darkMode ? "bg-gray-800" : "bg-gray-100";
-  const messageText = darkMode ? "text-gray-100" : "text-gray-900";
+  const { espStatus } = useContext(AppContext);
 
   useEffect(() => {
     const msgRef = ref(database, "/messages");
@@ -33,44 +28,44 @@ const RegisterStudent = () => {
         const list = Object.values(data).map((item) => item.msg);
         setMessages(list);
 
+        const stopLoadingKeywords = [
+          "Enroll Success",
+          "Image error",
+          "Invalid data",
+          "Image fail",
+          "2nd fail",
+          "Model fail",
+          "Store fail",
+          "Already Enrolled",
+        ];
+
         const stopLoading = list.some((msg) =>
-          [
-            "Enroll Success",
-            "Image error",
-            "Invalid data",
-            "Image fail",
-            "2nd fail",
-            "Model fail",
-            "Store fail",
-            "Already Enrolled",
-          ].some((keyword) => msg.includes(keyword))
+          stopLoadingKeywords.some((keyword) => msg.includes(keyword))
         );
 
         if (stopLoading) {
           setLoading(false);
+
           if (list.some((msg) => msg.includes("Enroll Success"))) {
             setName("");
             setRegNum("");
+            setTimeout(() => {
+              if (onClose) onClose();
+            }, 2000);
           }
 
           const failMsg = list.find((msg) =>
-            [
-              "Image error",
-              "Invalid data",
-              "Image fail",
-              "2nd fail",
-              "Model fail",
-              "Store fail",
-              "Already Enrolled",
-            ].some((keyword) => msg.includes(keyword))
+            stopLoadingKeywords.slice(1).some((keyword) => msg.includes(keyword))
           );
           setError(failMsg || "");
         }
-      } else setMessages([]);
+      } else {
+        setMessages([]);
+      }
     });
 
     return () => off(msgRef, "value", listener);
-  }, []);
+  }, [onClose]);
 
   const startEnroll = async () => {
     if (!name || !regNum) {
@@ -92,127 +87,194 @@ const RegisterStudent = () => {
     }
   };
 
+  const cancelEnroll = async () => {
+    try {
+      await set(ref(database, "/systemState"), "VERIFY");
+      setLoading(false);
+      setError("");
+      setMessages((prev) => [...prev, "Enrollment cancelled"]);
+    } catch (err) {
+      console.error("Failed to cancel enrollment:", err);
+      setError("Failed to cancel enrollment.");
+    }
+  };
+
   return (
-    <div className={`p-4 md:p-6 max-w-4xl mx-auto ${bgMain} ${textMain}`}>
-      <h1
-        className="text-2xl md:text-3xl font-bold mb-6 text-center"
-        style={{ color: primaryColor }}
-      >
-        ESP32 Attendance System
-      </h1>
+    <div className="w-full flex">
+      <div className="flex flex-col lg:flex-row w-full bg-[#0a0f18] rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-700/50">
+        {/* Left Side: Form */}
+        <div className="flex-1 p-6 md:p-8 bg-gradient-to-br from-[#111827] to-[#0f172a] relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-[60px]"></div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        {/* Enroll Section */}
-        <div
-          className={`flex-1 shadow-md rounded-xl p-4 border ${cardBorder} ${cardBg}`}
-        >
-          <h2 className="text-lg font-semibold mb-3">Enroll Student</h2>
-
-          <div className="space-y-2">
-            {["Name", "RegNum"].map((label, i) => {
-              const setter = [setName, setRegNum][i];
-              const value = [name, regNum][i];
-              return (
-                <input
-                  key={i}
-                  type="text"
-                  placeholder={label}
-                  value={value}
-                  onChange={(e) => setter(e.target.value)}
-                  disabled={loading}
-                  className={`w-full px-3 py-2 rounded-md border ${cardBorder} ${inputBg} ${inputText} ${placeholderText} focus:outline-none focus:ring-2 focus:ring-[${primaryColor}]`}
-                />
-              );
-            })}
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-2 rounded-xl text-sky-400 border border-sky-500/30">
+              <UserPlus size={16} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold tracking-wide text-white">
+                New Enrollment
+              </h2>
+            </div>
           </div>
 
-          {error && <div className="text-red-400 mt-1 text-sm">{error}</div>}
+          <div className="space-y-5 relative z-10">
+            <div>
+              <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2 font-bold">
+                Student Name
+              </label>
+              <input
+                type="text"
+                placeholder="Enter full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-xl bg-black/40 border border-slate-700/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 transition-all font-medium disabled:opacity-50"
+              />
+            </div>
 
-          <div className="flex items-center justify-between mt-5">
-            {/* Enroll Button */}
-            <div className="flex items-center gap-4">
+            <div>
+              <label className="block text-xs uppercase tracking-widest text-slate-400 mb-2 font-bold">
+                Registration Number
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. IT20123456"
+                value={regNum}
+                onChange={(e) => setRegNum(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-xl bg-black/40 border border-slate-700/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 transition-all font-medium disabled:opacity-50 uppercase"
+              />
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="mt-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center gap-3 font-medium"
+              >
+                <XOctagon size={18} />
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-10 pt-6 border-t border-slate-800 gap-4">
+            <div className="flex w-full sm:w-auto items-center gap-3">
               <button
                 onClick={startEnroll}
                 disabled={loading || espStatus !== "ONLINE"}
-                className={`px-4 py-1 rounded-lg font-semibold text-white transition-all duration-200 ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-white transition-all duration-300 shadow-lg ${
                   loading || espStatus !== "ONLINE"
-                    ? "bg-gray-500 cursor-not-allowed"
-                    : "bg-gradient-to-r from-[#01996f] to-[#02d88f] hover:from-[#02d88f] hover:to-[#01996f]"
+                    ? "bg-slate-800 cursor-not-allowed text-slate-500 shadow-none border border-slate-700"
+                    : "bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 shadow-sky-900/50 border border-sky-400/30 hover:scale-105"
                 }`}
               >
                 {loading ? (
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-4 h-4 border-2 border-t-2 border-t-green-500 border-gray-200 rounded-full animate-spin"></div>
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
                     Enrolling...
-                  </div>
+                  </>
                 ) : (
-                  "Enroll"
+                  <>
+                    <Fingerprint size={18} />
+                    Scan Finger
+                  </>
                 )}
               </button>
 
-              {/* Cancel Button */}
               <button
-                onClick={async () => {
-                  try {
-                    await set(ref(database, "/systemState"), "VERIFY");
-                    setLoading(false);
-                    setError("");
-                    setMessages((prev) => [...prev, "Enrollment cancelled"]);
-                  } catch (err) {
-                    console.error("Failed to cancel enrollment:", err);
-                    setError("Failed to cancel enrollment.");
-                  }
-                }}
-                disabled={!loading} // Only active during enrollment
-                className={`px-4 py-1 rounded-lg font-semibold text-white transition-all duration-200 ${
+                onClick={cancelEnroll}
+                disabled={!loading}
+                className={`flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold transition-all duration-300 ${
                   !loading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-red-500 hover:bg-red-600"
+                    ? "bg-black/20 text-slate-600 cursor-not-allowed border border-slate-800/50"
+                    : "bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 shadow-lg shadow-rose-900/20"
                 }`}
               >
                 Cancel
               </button>
             </div>
 
-            {/* ESP32 Status */}
-            <div className="flex items-center gap-2 text-sm">
-              <span
-                className={`w-3 h-3 rounded-full border-2 border-white ${
-                  espStatus === "ONLINE"
-                    ? "bg-[#00ff88] animate-pulse"
-                    : "bg-red-500"
-                }`}
-                style={{
-                  boxShadow:
+            <div className="flex items-center gap-3 bg-black/40 px-4 py-2.5 rounded-full border border-slate-800 shadow-inner">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
                     espStatus === "ONLINE"
-                      ? `0 0 6px ${primaryColor}`
-                      : "0 0 6px red",
-                }}
-              ></span>
-              <span>{espStatus}</span>
+                      ? "bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse"
+                      : "bg-rose-500 shadow-[0_0_10px_#f43f5e]"
+                  }`}
+                ></span>
+                <span
+                  className={`text-xs font-bold tracking-wider uppercase ${
+                    espStatus === "ONLINE" ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {espStatus}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Messages Section */}
-        <div
-          className={`flex-1 shadow-md rounded-xl p-4 border ${cardBorder} ${cardBg}`}
-        >
-          <h2 className="text-lg font-semibold mb-2">Enrollment Messages</h2>
-          <div
-            className={`h-48 overflow-y-auto p-2 rounded-md border ${cardBorder} ${messageBg} ${messageText} font-mono text-sm`}
-          >
-            {messages.length === 0 ? (
-              <div className="text-gray-400 italic text-xs">
-                No messages yet...
-              </div>
-            ) : (
-              messages.map((msg, idx) => (
-                <div key={idx} className="mb-1 text-sm">
-                  {msg}
+        {/* Right Side: Terminal */}
+        <div className="flex-1 bg-black/80 p-6 md:p-8 border-l border-slate-800 flex flex-col relative overflow-hidden">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800/80">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+              <Clipboard size={16} /> Device Output
+            </h2>
+            <div className="flex gap-2">
+              <div className="w-3 h-3 rounded-full bg-rose-500/30 border border-rose-500/50"></div>
+              <div className="w-3 h-3 rounded-full bg-amber-500/30 border border-amber-500/50"></div>
+              <div className="w-3 h-3 rounded-full bg-emerald-500/30 border border-emerald-500/50"></div>
+            </div>
+          </div>
+
+          <div className="flex-1 h-64 lg:h-auto overflow-y-auto rounded-xl bg-black/40 font-mono text-sm leading-relaxed custom-scrollbar relative">
+            <AnimatePresence>
+              {messages.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 flex items-center justify-center text-slate-600/50 italic text-sm"
+                >
+                  Waiting for device telemetry...
+                </motion.div>
+              ) : (
+                <div className="space-y-2 p-2 w-full">
+                  {messages.map((msg, idx) => (
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      key={idx}
+                      className={`px-3 py-1.5 rounded-md text-[13px] ${
+                        msg.includes("error") ||
+                        msg.includes("fail") ||
+                        msg.includes("cancelled")
+                          ? "text-rose-400 bg-rose-500/5"
+                          : msg.includes("Success") || msg.includes("Stored")
+                          ? "text-emerald-400 bg-emerald-500/5"
+                          : "text-sky-300 bg-sky-500/5"
+                      } break-words border-l-2 ${
+                        msg.includes("error") ||
+                        msg.includes("fail") ||
+                        msg.includes("cancelled")
+                          ? "border-rose-500/50"
+                          : msg.includes("Success") || msg.includes("Stored")
+                          ? "border-emerald-500/50"
+                          : "border-sky-500/50"
+                      }`}
+                    >
+                      <span className="text-slate-600 mr-2 opacity-50">{`>`}</span>
+                      {msg}
+                    </motion.div>
+                  ))}
                 </div>
-              ))
-            )}
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>

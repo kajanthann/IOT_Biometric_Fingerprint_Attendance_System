@@ -1,257 +1,164 @@
 import React, { useContext, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { AppContext } from "../context/AppContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, X, LogIn, LogOut } from "lucide-react";
 
 const Header = ({ token, setToken }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { espStatus, darkMode, setDarkMode } = useContext(AppContext);
+  const { espStatus } = useContext(AppContext);
 
   const handleLogout = () => setToken("");
 
   const navLinks = [
-    "/home",
-    "/students",
-    "/attendance",
-    "/modules",
-    "/time-table",
+    { name: "Students", path: "/students" },
+    { name: "Attendance", path: "/attendance" },
+    { name: "Modules", path: "/modules" },
+    { name: "Time Table", path: "/time-table" },
   ];
 
   return (
-    <header
-      className={`shadow-lg border-b ${
-        darkMode
-          ? "bg-gray-900 text-gray-200 border-gray-700"
-          : "bg-[#01996f] text-white border-[#01996f]"
-      }`}
-    >
-      <div className="flex justify-between items-center px-4 py-3 mx-auto">
+    <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#0b1120]/80 border-b border-sky-500/20 shadow-[0_4px_30px_rgba(14,165,233,0.1)]">
+      <div className="flex justify-between items-center px-6 py-2 max-w-7xl mx-auto">
         {/* Logo */}
         <NavLink to="/home">
-          <div className="text-4xl flex items-center cursor-pointer relative">
-            F<span>O</span>C
-            <span
-              className={`text-xs ml-[-12px] mt-[2px] align-middle ${
-                darkMode ? "text-gray-400" : "text-white"
-              }`}
-            >
+          <motion.div
+            className="text-5xl font-semibold flex items-center cursor-pointer relative tracking-tight text-white"
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            F<span className="text-sky-500">O</span>C
+            <span className="text-xs ml-[-10px] mt-1 align-middle text-slate-400 uppercase tracking-widest font-semibold">
               Attendance
             </span>
             {/* LED Status */}
             {token && (
-              <span
-                className={`w-3.5 h-3.5 border-2 rounded-full ml-2 mt-2 align-middle ${
-                  espStatus === "ONLINE" ? "animate-pulse" : ""
-                }`}
+              <motion.span
+                animate={
+                  espStatus === "ONLINE"
+                    ? { scale: [1, 1.2, 1], opacity: [0.7, 1, 0.7] }
+                    : {}
+                }
+                transition={{ repeat: Infinity, duration: 1.5 }}
+                className="w-3.5 h-3.5 border-2 border-[#0b1120] rounded-full ml-1 mt-1.5"
                 style={{
                   backgroundColor:
-                    espStatus === "ONLINE" ? "#00ff88" : "#ff5c5c",
+                    espStatus === "ONLINE" ? "#10b981" : "#ef4444",
                   boxShadow:
-                    espStatus === "ONLINE" ? "0 0 8px #01996f" : "0 0 8px red",
+                    espStatus === "ONLINE"
+                      ? "0 0 12px #10b981"
+                      : "0 0 12px #ef4444",
                 }}
+                title={`ESP32 is ${espStatus}`}
               />
             )}
-          </div>
+          </motion.div>
         </NavLink>
 
-<div className="space-x-5 hidden md:flex">
-  {navLinks.map((path) => (
+        {/* Desktop Nav */}
+        <nav className="hidden md:flex space-x-1 lg:space-x-2 items-center font-medium">
+          {navLinks.map((link) => (
             <NavLink
-              key={path}
-              to={path}
+              key={link.path}
+              to={link.path}
               className={({ isActive }) =>
-                `hover:text-white ${
+                `px-4 py-2 rounded-full transition-all duration-300 ${
                   isActive
-                    ? "font-bold underline"
-                    : darkMode
-                    ? "text-gray-300"
-                    : "text-white/80"
+                    ? "bg-sky-500/10 text-sky-400 shadow-[inset_0_0_10px_rgba(56,189,248,0.2)]"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`
               }
             >
-              {path.replace("/", "").replace("-", " ").toUpperCase() || "HOME"}
+              {link.name}
             </NavLink>
           ))}
-</div>
 
-        {/* Desktop Nav */}
-        <nav className="hidden md:flex space-x-3 lg:space-x-6 items-center font-medium">
-          <button
-          onClick={() => setDarkMode(!darkMode)}
-          className={`relative w-20 h-8 rounded-full transition-all duration-700 shadow-inner overflow-hidden ${
-            darkMode
-              ? "bg-[#0a1a2f]"
-              : "bg-gradient-to-r from-sky-200 to-sky-400"
-          }`}
-        >
-          {/* Clouds (Day mode) - behind the sun */}
-          {!darkMode && (
-            <div className="absolute top-1 left-5 flex space-x-1 transition-opacity duration-700 z-0">
-              <div className="w-6 h-3 bg-white rounded-full opacity-80"></div>
-              <div className="w-4 h-2 bg-white rounded-full opacity-70 mt-3"></div>
-            </div>
-          )}
-
-          {/* Sun & Moon */}
-          <div
-            className={`absolute top-1 left-1 w-6 h-6 rounded-full transition-all duration-700 z-10 ${
-              darkMode
-                ? "translate-x-12 bg-yellow-200 shadow-[0_0_15px_5px_rgba(255,255,200,0.4)]"
-                : "bg-yellow-400 shadow-[0_0_15px_5px_rgba(255,255,0,0.5)]"
-            }`}
-          ></div>
-
-          {/* Stars (Night mode only) */}
-          {darkMode && (
-            <div className="absolute inset-0 z-0">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute w-1 h-1 bg-white rounded-full opacity-70"
-                  style={{
-                    top: `${Math.random() * 70 + 10}%`,
-                    left: `${Math.random() * 80 + 5}%`,
-                  }}
-                ></div>
-              ))}
-            </div>
-          )}
-        </button>
+          <div className="w-px h-6 bg-slate-700/50 mx-2"></div>
 
           {!token ? (
             <NavLink
               to="/login"
-              className={`px-3 py-1 rounded-lg ${
-                darkMode
-                  ? "bg-[#01996f] text-gray-900 hover:bg-[#00e68a]"
-                  : "bg-white/20 text-white hover:bg-white/30"
-              }`}
+              className="flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-sky-600 to-indigo-600 text-white font-semibold hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] transition-all duration-300"
             >
+              <LogIn size={18} />
               Login
             </NavLink>
           ) : (
             <button
               onClick={handleLogout}
-              className={`px-3 py-1 rounded-2xl ${
-                darkMode
-                  ? "bg-[#01996f] text-gray-900 hover:bg-[#00e68a]"
-                  : "bg-white/20 text-white hover:bg-white/30"
-              }`}
+              className="flex items-center gap-2 px-5 py-2 rounded-full border border-rose-500/50 text-rose-400 font-semibold hover:bg-rose-500/10 hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all duration-300"
             >
+              <LogOut size={18} />
               Logout
             </button>
           )}
         </nav>
 
         {/* Mobile Hamburger */}
-        <div className="md:hidden flex items-center space-x-4">
-          <button
-          onClick={() => setDarkMode(!darkMode)}
-          className={`relative w-20 h-8 rounded-full transition-all duration-700 shadow-inner overflow-hidden ${
-            darkMode
-              ? "bg-[#0a1a2f]"
-              : "bg-gradient-to-r from-sky-200 to-sky-400"
-          }`}
-        >
-          {/* Clouds (Day mode) - behind the sun */}
-          {!darkMode && (
-            <div className="absolute top-1 left-5 flex space-x-1 transition-opacity duration-700 z-0">
-              <div className="w-6 h-3 bg-white rounded-full opacity-80"></div>
-              <div className="w-4 h-2 bg-white rounded-full opacity-70 mt-3"></div>
-            </div>
-          )}
-
-          {/* Sun & Moon */}
-          <div
-            className={`absolute top-1 left-1 w-6 h-6 rounded-full transition-all duration-700 z-10 ${
-              darkMode
-                ? "translate-x-12 bg-yellow-200 shadow-[0_0_15px_5px_rgba(255,255,200,0.4)]"
-                : "bg-yellow-400 shadow-[0_0_15px_5px_rgba(255,255,0,0.5)]"
-            }`}
-          ></div>
-
-          {/* Stars (Night mode only) */}
-          {darkMode && (
-            <div className="absolute inset-0 z-0 ">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute w-1 h-1 bg-white rounded-full opacity-70"
-                  style={{
-                    top: `${Math.random() * 70 + 10}%`,
-                    left: `${Math.random() * 80 + 5}%`,
-                  }}
-                ></div>
-              ))}
-            </div>
-          )}
-        </button>
-
+        <div className="md:hidden flex items-center">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="focus:outline-none"
+            className="text-slate-300 hover:text-white transition-colors p-2"
           >
-            <svg
-              className={`w-6 h-6 ${darkMode ? "text-gray-200" : "text-white"}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              {menuOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              )}
-            </svg>
+            {menuOpen ? <X size={28} /> : <Menu size={28} />}
           </button>
         </div>
       </div>
 
       {/* Mobile Menu */}
-      {menuOpen && (
-        <div
-          className={`md:hidden px-4 pb-4 space-y-2 ${
-            darkMode ? "bg-gray-900 text-gray-200" : "bg-[#01996f] text-white"
-          }`}
-        >
-          {navLinks.map((path) => (
-            <NavLink
-              key={path}
-              to={path}
-              onClick={() => setMenuOpen(false)}
-              className="block py-2 hover:text-white/80"
-            >
-              {path.replace("/", "").replace("-", " ").toUpperCase() || "HOME"}
-            </NavLink>
-          ))}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="md:hidden overflow-hidden bg-[#0f172a] border-b border-sky-500/20"
+          >
+            <div className="px-6 py-4 space-y-2 flex flex-col">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.path}
+                  to={link.path}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `block py-3 px-4 rounded-xl transition-all ${
+                      isActive
+                        ? "bg-sky-500/20 text-sky-400"
+                        : "text-slate-300 hover:bg-white/5 hover:text-white"
+                    }`
+                  }
+                >
+                  {link.name}
+                </NavLink>
+              ))}
 
-          {!token ? (
-            <NavLink
-              to="/login"
-              onClick={() => setMenuOpen(false)}
-              className="block py-2 bg-teal-700 text-white rounded-lg hover:bg-white/30"
-            >
-              Login
-            </NavLink>
-          ) : (
-            <button
-              onClick={handleLogout}
-              className="block py-2 bg-teal-700 text-white rounded-2xl hover:bg-white/30 w-full"
-            >
-              Logout
-            </button>
-          )}
-        </div>
-      )}
+              <div className="h-px w-full bg-slate-700/50 my-2"></div>
+
+              {!token ? (
+                <NavLink
+                  to="/login"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 py-3 mt-2 rounded-xl bg-sky-600 text-white font-semibold shadow-lg shadow-sky-900/50"
+                >
+                  <LogIn size={20} />
+                  Login
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setMenuOpen(false);
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 mt-2 rounded-xl border border-rose-500/50 text-rose-400 font-semibold hover:bg-rose-500/10"
+                >
+                  <LogOut size={20} />
+                  Logout
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };
