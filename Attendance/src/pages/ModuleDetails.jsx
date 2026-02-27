@@ -99,7 +99,7 @@ const ModuleDetails = () => {
                   {moduleData.map((data, idx) => (
                     <span
                       key={idx}
-                      className="flex-shrink-0 flex items-center gap-2 text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 whitespace-nowrap"
+                      className="flex-shrink-0 flex items-center gap-2 text-xs sm:text-sm px-3 sm:px-4 py-1 rounded-lg font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 whitespace-nowrap"
                     >
                       <Calendar size={14} className="text-indigo-400/70" />
                       {data.day}
@@ -118,18 +118,18 @@ const ModuleDetails = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-[#111827]/80 backdrop-blur-xl shadow-2xl rounded-3xl p-8 border border-slate-700/50"
+          className="bg-[#111827]/80 backdrop-blur-xl shadow-2xl rounded-3xl border border-slate-700/50"
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+          <div className="flex items-center px-8 pt-4 gap-3">
+            <div className=" bg-emerald-500/10 rounded-lg text-emerald-400">
               <Users size={24} />
             </div>
             <h2 className="text-2xl font-bold tracking-wide text-white">
-              Module Attendance
+              Attendance
             </h2>
           </div>
 
-          <div className="-mx-4 sm:mx-0">
+          <div className="">
             <Attendance day={day} timeSlots={timeSlots} />
           </div>
         </motion.div>
