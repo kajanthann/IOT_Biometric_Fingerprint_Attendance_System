@@ -203,7 +203,7 @@ const Home = () => {
           </div>
 
           <motion.div
-            className="lg:w-1/2 w-full h-full relative"
+            className="lg:w-1/2 w-full h-full relative hidden md:block"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
