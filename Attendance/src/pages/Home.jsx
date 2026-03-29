@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import heroImg from "../assets/hero2.png";
-import img from "../assets/home.png";
+import img from "../assets//Gemini_Generated_Image_r7uqa1r7uqa1r7uq.png";
 import {
   Fingerprint,
   Wifi,
