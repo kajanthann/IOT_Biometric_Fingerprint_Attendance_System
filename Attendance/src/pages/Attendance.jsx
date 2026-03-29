@@ -460,19 +460,33 @@ const Attendance = ({ day, timeSlots = [] }) => {
                             <div className="flex flex-col items-center justify-center h-full min-h-[40px]">
                               {isPresent ? (
                                 <>
-                                  <div className="w-5 h-5 flex items-center justify-center rounded-md bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                                    P
-                                  </div>
+                                  <div className="flex flex-col items-center justify-center gap-0.5">
+    
+    {/* P box */}
+    <div className="w-5 h-5 flex items-center justify-center rounded-md bg-emerald-900/20 text-emerald-400 font-bold border border-emerald-500/30">
+      P
+    </div>
 
-                                  <AnimatePresence>
-                                    {showTime && (
-                                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-6 z-30 p-2 bg-slate-800 border border-slate-600 rounded-lg shadow-xl shadow-black">
-                                        <span className="text-[10px] font-mono text-emerald-300 whitespace-nowrap">
-                                          {att.slice(2)}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </AnimatePresence>
+    {/* Time inside cell */}
+    <AnimatePresence>
+      {showTime && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8, y: -2 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.8, y: -2 }}
+          className="text-[9px] font-mono text-emerald-300 leading-tight text-center break-words max-w-[50px]"
+        >
+          {att.slice(2).split(", ").map((time, i) => (
+  <div key={i}>{time}</div>
+))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+  </div>
+
+
+                                  
                                 </>
                               ) : isAbsent ? (
                                 <div className="w-5 h-5 flex items-center justify-center rounded-md bg-rose-500/10 text-rose-500/80 font-bold border border-rose-500/20">
