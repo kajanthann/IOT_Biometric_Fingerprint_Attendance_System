@@ -3,380 +3,706 @@
 #include <Adafruit_Fingerprint.h>
 #include <HardwareSerial.h>
 #include <WiFi.h>
-#include <Firebase_ESP_Client.h>
-#include <addons/TokenHelper.h>
-#include <addons/RTDBHelper.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include "time.h"
+#include "esp_sntp.h"          // ← needed for sntp_get_sync_status()
 #include "secrets.h"
 #include <EEPROM.h>
 
-// ---------------- OLED ----------------
-#define SCREEN_WIDTH 128
+// ================================================================
+//  OLED
+// ================================================================
+#define SCREEN_WIDTH  128
 #define SCREEN_HEIGHT 128
 Adafruit_SH1107 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
-// Variables for OLED text bounds
-int16_t tx1, ty1;
+int16_t  tx1, ty1;
 uint16_t tw, th;
-String bottomMsg = "Waiting...";
+String   bottomMsg      = "Waiting...";
 unsigned long lastTopUpdate = 0;
 
-// ---------------- AS608 ----------------
+// ================================================================
+//  AS608
+// ================================================================
 HardwareSerial mySerial(1);
 #define RX_PIN 18
 #define TX_PIN 19
 Adafruit_Fingerprint finger(&mySerial);
 
-// ---------------- LED ----------------
+// ================================================================
+//  LEDs
+// ================================================================
 #define GREEN_LED 2
-#define RED_LED 4
+#define RED_LED   4
 
-// ---------------- EEPROM ----------------
-#define EEPROM_SIZE 4096
-#define MAX_STUDENTS 50
-#define MAX_OFFLINE_ATTENDANCE 30
-#define STUDENT_NAME_LEN 20
-#define STUDENT_REG_LEN 15
-#define STUDENT_RECORD_SIZE (1 + STUDENT_NAME_LEN + STUDENT_REG_LEN)
-#define STUDENTS_EEPROM_SIZE (1 + (MAX_STUDENTS * STUDENT_RECORD_SIZE))
-#define TS_LEN 20
-#define OFFLINE_RECORD_SIZE (1 + STUDENT_NAME_LEN + STUDENT_REG_LEN + TS_LEN)
-#define OFFLINE_EEPROM_SIZE (1 + (MAX_OFFLINE_ATTENDANCE * OFFLINE_RECORD_SIZE))
-#define OFFLINE_START_ADDR (STUDENTS_EEPROM_SIZE)
+// ================================================================
+//  NTP / Time
+//
+//  IST = UTC+5:30 → gmtOffset_sec = 19800
+//  Change gmtOffset_sec for your timezone.
+//
+//  TS_LEN is now 26 to hold "YYYY-MM-DDTHH:MM:SS+05:30\0".
+//  ⚠ If you had data stored with the old 20-byte TS_LEN, clear
+//    EEPROM once after flashing (see clearEEPROM() helper below).
+// ================================================================
+const char *ntpServer          = "pool.ntp.org";
+const char *ntpServer2         = "time.cloudflare.com";   // fallback
+const long  gmtOffset_sec      = 19800;   // UTC+5:30 (IST)
+const int   daylightOffset_sec = 0;
+#define TZ_SUFFIX "+05:30"                // appended to every timestamp
+
+// Re-sync NTP every hour to prevent drift
+#define NTP_RESYNC_INTERVAL_MS  3600000UL
+// Maximum age of a "good" NTP sync before we consider time stale
+#define NTP_STALE_MS            7200000UL // 2 hours
+
+volatile bool ntpSynced       = false;
+unsigned long ntpSyncedAtMs   = 0;        // millis() when last sync confirmed
+unsigned long lastNTPResync   = 0;
+
+// ================================================================
+//  EEPROM layout
+//
+//  TS_LEN bumped from 20 → 26 to fit timezone suffix in timestamp.
+//  All other sizes unchanged.
+// ================================================================
+#define EEPROM_SIZE             4096
+#define MAX_STUDENTS            50
+#define MAX_OFFLINE_ATTENDANCE  30
+#define STUDENT_NAME_LEN        20
+#define STUDENT_REG_LEN         15
+#define TS_LEN                  26        // "YYYY-MM-DDTHH:MM:SS+05:30\0"
+#define STUDENT_RECORD_SIZE     (1 + STUDENT_NAME_LEN + STUDENT_REG_LEN)
+#define STUDENTS_EEPROM_SIZE    (1 + (MAX_STUDENTS * STUDENT_RECORD_SIZE))
+#define OFFLINE_RECORD_SIZE     (1 + STUDENT_NAME_LEN + STUDENT_REG_LEN + TS_LEN)
+#define OFFLINE_EEPROM_SIZE     (1 + (MAX_OFFLINE_ATTENDANCE * OFFLINE_RECORD_SIZE))
+#define OFFLINE_START_ADDR      (STUDENTS_EEPROM_SIZE)
 
 #if (STUDENTS_EEPROM_SIZE + OFFLINE_EEPROM_SIZE) > EEPROM_SIZE
-#error "EEPROM layout exceeds EEPROM_SIZE"
+  #error "EEPROM layout exceeds EEPROM_SIZE — reduce MAX_STUDENTS or MAX_OFFLINE_ATTENDANCE"
 #endif
 
-// ---------------- Firebase ----------------
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
+// ================================================================
+//  MQTT topics
+// ================================================================
+#define TOPIC_ATTENDANCE   "fp/attendance"
+#define TOPIC_ENROLLED     "fp/enrolled"
+#define TOPIC_HEARTBEAT    "fp/heartbeat"
+#define TOPIC_MESSAGE      "fp/message"
+#define TOPIC_STATE_PUB    "fp/stateAck"
 
-// ---------------- Data Structures ----------------
+#define TOPIC_SYS_STATE    "fp/systemState"
+#define TOPIC_ENROLL_DATA  "fp/enrollData"
+
+#define MQTT_BUF_SIZE 512
+
+// ================================================================
+//  MQTT client
+// ================================================================
+WiFiClientSecure wifiSecure;
+PubSubClient     mqttClient(wifiSecure);
+bool             mqttConnected = false;
+
+volatile bool newStateReceived  = false;
+volatile bool newEnrollReceived = false;
+char mqttStateBuf[16]                    = "VERIFY";
+char mqttEnrollNameBuf[STUDENT_NAME_LEN] = {0};
+char mqttEnrollRegBuf[STUDENT_REG_LEN]   = {0};
+
+// ================================================================
+//  Data structures
+// ================================================================
 struct Student {
   uint8_t id;
-  char name[STUDENT_NAME_LEN];
-  char regNum[STUDENT_REG_LEN];
+  char    name[STUDENT_NAME_LEN];
+  char    regNum[STUDENT_REG_LEN];
 };
 Student students[MAX_STUDENTS];
 uint8_t studentCount = 0;
 
 struct Attendance {
   uint8_t id;
-  char name[STUDENT_NAME_LEN];
-  char regNum[STUDENT_REG_LEN];
-  char timestamp[TS_LEN];
+  char    name[STUDENT_NAME_LEN];
+  char    regNum[STUDENT_REG_LEN];
+  char    timestamp[TS_LEN];
 };
 Attendance offlineAttendance[MAX_OFFLINE_ATTENDANCE];
-uint8_t offlineCount = 0;
+uint8_t    offlineCount = 0;
 
-bool firebaseReady = false;
 enum SystemState { VERIFY, ENROLL };
 SystemState currentState = VERIFY;
 
-// ---------------- NTP ----------------
-const char *ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 19800;
-const int daylightOffset_sec = 0;
+// ================================================================
+//  Function prototypes
+// ================================================================
+void    oledTop();
+void    oledBottom(const String &msg, bool sendToMQTT = false);
+void    oledBottomRefresh();
+void    oledProgressBar(uint8_t percent);
+void    oledShowState();
+void    enrollFinger();
+void    verifyFingerNonBlocking();
+bool    mqttPublish(const char *topic, const String &payload, bool retained = false);
+String  getTimestamp();
+bool    isTimeSynced();
+bool    waitForNTPSync(uint32_t timeoutMs);
+void    triggerNTPResync();
+void    reconnectWiFi();
+void    reconnectMQTT();
+void    mqttCallback(char *topic, byte *payload, unsigned int length);
+void    saveStudentsToEEPROM();
+void    loadStudentsFromEEPROM();
+void    saveOfflineAttendanceToEEPROM();
+void    loadOfflineAttendanceFromEEPROM();
+void    syncOfflineAttendance();
+void    removeOfflineRecordAt(uint8_t idx);
+bool    safeEEPROMWrite(int addr, const uint8_t *buf, size_t len);
+String  sanitizeKey(const String &s);
 
-// ---------------- Function Prototypes ----------------
-void oledTop();
-void oledBottom(const String &msg, uint8_t line = 0, bool sendToFirebase = false);
-void oledBottomRefresh();
-void oledProgressBar(uint8_t percent);
-void enrollFinger(FirebaseJson &enrollDataJson);
-void verifyFingerNonBlocking();
-bool writeFirebase(const String &path, FirebaseJson &json);
-String getTimestamp();
-bool readEnrollData(FirebaseJson &json, String &name, String &regNum);
-void reconnectWiFi();
-void reconnectFirebase();
-void saveStudentsToEEPROM();
-void loadStudentsFromEEPROM();
-void saveOfflineAttendanceToEEPROM();
-void loadOfflineAttendanceFromEEPROM();
-void syncOfflineAttendance();
-void removeOfflineRecordAt(uint8_t idx);
-bool safeEEPROMWrite(int addr, const uint8_t *buf, size_t len);
-String sanitizeKey(const String &s);
+// ================================================================
+//  NTP sync callback  (called by SNTP stack on every sync)
+// ================================================================
+void ntpSyncCallback(struct timeval *tv) {
+  ntpSynced     = true;
+  ntpSyncedAtMs = millis();
+  Serial.printf("[NTP] Synced — epoch=%llu\n", (unsigned long long)tv->tv_sec);
+}
 
-// ---------------- Setup ----------------
+// ================================================================
+//  isTimeSynced()
+//  Returns true only if NTP has synced AND the sync is not stale.
+//  Stale = no re-sync for > NTP_STALE_MS (default 2 h).
+// ================================================================
+bool isTimeSynced() {
+  if (!ntpSynced) return false;
+  if ((millis() - ntpSyncedAtMs) > NTP_STALE_MS) {
+    // Time might have drifted — flag as unsynced until next resync confirms
+    ntpSynced = false;
+    Serial.println("[NTP] Sync considered stale — forcing resync");
+    return false;
+  }
+  return true;
+}
+
+// ================================================================
+//  waitForNTPSync()
+//  Blocks until SNTP confirms a sync, or times out.
+//  Returns true on success.
+// ================================================================
+bool waitForNTPSync(uint32_t timeoutMs = 10000) {
+  uint32_t start = millis();
+  while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET) {
+    if (millis() - start > timeoutMs) {
+      Serial.println("[NTP] Sync timeout");
+      return false;
+    }
+    delay(100);
+  }
+  ntpSynced     = true;
+  ntpSyncedAtMs = millis();
+  return true;
+}
+
+// ================================================================
+//  triggerNTPResync()
+//  Forces SNTP to re-poll. Call periodically from the main loop.
+// ================================================================
+void triggerNTPResync() {
+  Serial.println("[NTP] Forcing resync...");
+  // Re-configure restarts the SNTP polling immediately
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, ntpServer2);
+  // Don't block — sync callback will set ntpSynced when done
+}
+
+// ================================================================
+//  getTimestamp()
+//  Returns ISO-8601 timestamp with timezone suffix, e.g.:
+//    "2025-06-15T14:30:05+05:30"
+//  Returns empty string "" if time is not yet synced — callers
+//  must check for empty and handle offline storage accordingly.
+// ================================================================
+String getTimestamp() {
+  if (!isTimeSynced()) {
+    Serial.println("[Time] Not synced — timestamp unavailable");
+    return "";   // empty = caller must not trust this timestamp
+  }
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("[Time] getLocalTime() failed");
+    return "";
+  }
+  char buffer[TS_LEN];
+  // "2025-06-15T14:30:05+05:30"
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S" TZ_SUFFIX, &timeinfo);
+  return String(buffer);
+}
+
+// ================================================================
+//  SETUP
+// ================================================================
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n--- ESP32 Fingerprint Attendance (Revised) ---");
+  Serial.println("\n--- ESP32 Fingerprint Attendance (MQTT) ---");
 
   pinMode(GREEN_LED, OUTPUT);
-  pinMode(RED_LED, OUTPUT);
+  pinMode(RED_LED,   OUTPUT);
   digitalWrite(GREEN_LED, LOW);
-  digitalWrite(RED_LED, LOW);
+  digitalWrite(RED_LED,   LOW);
 
-  if (!EEPROM.begin(EEPROM_SIZE)) Serial.println("EEPROM.begin failed!");
-
+  // EEPROM
+  if (!EEPROM.begin(EEPROM_SIZE)) Serial.println("[EEPROM] begin failed!");
   loadStudentsFromEEPROM();
   loadOfflineAttendanceFromEEPROM();
 
+  // OLED
   Wire.begin(21, 22);
   if (!display.begin(0x3C, true)) {
-    Serial.println(F("OLED init failed"));
+    Serial.println(F("[OLED] init failed"));
     while (1) delay(10);
   }
   display.clearDisplay();
   display.setRotation(0);
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-
   oledBottom("System Booting...");
 
+  // Fingerprint sensor
   mySerial.begin(57600, SERIAL_8N1, RX_PIN, TX_PIN);
   delay(100);
   oledBottom("Checking AS608...");
-  Serial.println("Checking fingerprint sensor...");
-  if (finger.verifyPassword()) oledBottom("AS608 Found!");
-  else {
+  if (finger.verifyPassword()) {
+    oledBottom("AS608 Found!");
+    Serial.println("[FP] AS608 found");
+  } else {
     oledBottom("AS608 NOT FOUND!");
+    Serial.println("[FP] AS608 NOT FOUND");
     digitalWrite(RED_LED, HIGH);
     while (1) delay(1);
   }
 
+  // WiFi
+  oledBottom("Connecting WiFi...");
   reconnectWiFi();
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  oledBottom(WiFi.status() == WL_CONNECTED ? "WiFi OK!" : "WiFi FAILED!");
 
-  config.database_url = FIREBASE_HOST;
-  config.signer.tokens.legacy_token = FIREBASE_AUTH;
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
-  firebaseReady = Firebase.ready();
-  oledBottom(firebaseReady ? "Firebase Ready!" : "Firebase Failed!");
-  if (firebaseReady) Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
+  // NTP — register callback BEFORE configTime so we never miss a sync event
+  sntp_set_time_sync_notification_cb(ntpSyncCallback);
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, ntpServer2);
+
+  oledBottom("Syncing time...");
+  if (waitForNTPSync(12000)) {
+    // Confirm with a full getLocalTime check as belt-and-suspenders
+    struct tm t;
+    if (getLocalTime(&t) && t.tm_year > 100) {   // year > 2000 = sane
+      oledBottom("Time synced!");
+      Serial.printf("[NTP] OK: %04d-%02d-%02d %02d:%02d:%02d\n",
+                    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                    t.tm_hour, t.tm_min, t.tm_sec);
+    } else {
+      ntpSynced = false;
+      oledBottom("Time: bad value!");
+      Serial.println("[NTP] getLocalTime returned insane value");
+    }
+  } else {
+    oledBottom("Time sync failed!");
+    // Not fatal — we continue; attendance will go to offline buffer
+    // and be synced when both WiFi and NTP recover.
+  }
+  lastNTPResync = millis();
+
+  // MQTT
+  wifiSecure.setInsecure();
+  mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+  mqttClient.setCallback(mqttCallback);
+  mqttClient.setBufferSize(MQTT_BUF_SIZE);
+
+  oledBottom("Connecting MQTT...");
+  reconnectMQTT();
+  oledBottom(mqttConnected ? "MQTT Ready!" : "MQTT Failed!");
+  delay(600);
 
   currentState = VERIFY;
-  bottomMsg = "Place finger...";
-  oledBottomRefresh();
+  bottomMsg    = "Place finger...";
+  oledShowState();
 }
 
-// ---------------- Loop ----------------
-unsigned long lastHeartbeat = 0;
+// ================================================================
+//  LOOP
+// ================================================================
+unsigned long lastHeartbeat   = 0;
 unsigned long lastOfflineSync = 0;
+
 void loop() {
-  if (millis() - lastTopUpdate > 1000) { oledTop(); lastTopUpdate = millis(); }
+  // ── Keep MQTT alive ─────────────────────────────────────────
+  if (!mqttClient.connected()) {
+    mqttConnected = false;
+    reconnectMQTT();
+  } else {
+    mqttConnected = true;
+  }
+  mqttClient.loop();
 
+  // ── WiFi watchdog ───────────────────────────────────────────
   if (WiFi.status() != WL_CONNECTED) reconnectWiFi();
-  if (!Firebase.ready()) { firebaseReady = false; reconnectFirebase(); }
-  else firebaseReady = true;
 
-  if (firebaseReady && millis() - lastHeartbeat > 1000) {
-    Firebase.RTDB.setString(&fbdo, "/status", getTimestamp());
+  // ── Periodic NTP resync ─────────────────────────────────────
+  if (WiFi.status() == WL_CONNECTED &&
+      millis() - lastNTPResync > NTP_RESYNC_INTERVAL_MS) {
+    triggerNTPResync();
+    lastNTPResync = millis();
+  }
+
+  // ── OLED top bar every second ───────────────────────────────
+  if (millis() - lastTopUpdate > 1000) {
+    oledTop();
+    lastTopUpdate = millis();
+  }
+
+  // ── Heartbeat every 2 s (only if time is valid) ─────────────
+  if (mqttConnected && millis() - lastHeartbeat > 2000) {
+    String ts = getTimestamp();
+    if (ts.length() > 0) {
+      // Publish JSON so the bridge knows both raw time and sync status
+      StaticJsonDocument<128> hb;
+      hb["ts"]     = ts;
+      hb["synced"] = isTimeSynced();
+      String hbPayload;
+      serializeJson(hb, hbPayload);
+      mqttPublish(TOPIC_HEARTBEAT, hbPayload);
+    }
     lastHeartbeat = millis();
   }
 
-  if (firebaseReady && offlineCount > 0 && millis() - lastOfflineSync > 3000) {
+  // ── Offline sync every 3 s (only when time is synced) ───────
+  //    We wait for a valid clock so synced records get real timestamps.
+  if (mqttConnected && isTimeSynced() &&
+      offlineCount > 0 && millis() - lastOfflineSync > 3000) {
     syncOfflineAttendance();
     lastOfflineSync = millis();
   }
 
-  String fbState = (currentState == ENROLL) ? "ENROLL" : "VERIFY";
-  if (firebaseReady && Firebase.RTDB.getString(&fbdo, "/systemState")) fbState = fbdo.stringData();
-
-  static bool enrolling = false;
-  static FirebaseJson enrollJson;
-  if (fbState == "ENROLL" && !enrolling) {
-    enrolling = true;
-    if (firebaseReady) Firebase.RTDB.getJSON(&fbdo, "/enrollData", &enrollJson);
-    oledBottom("Enrollment Started...");
-    enrollFinger(enrollJson);
-    oledBottom("Enrollment Complete!");
-    enrolling = false;
-    if (firebaseReady) {
-      Firebase.RTDB.deleteNode(&fbdo, "/messages");
-      Firebase.RTDB.setString(&fbdo, "/systemState", "VERIFY");
+  // ── Handle incoming state command ───────────────────────────
+  if (newStateReceived) {
+    newStateReceived = false;
+    String s(mqttStateBuf);
+    Serial.printf("[State] → %s\n", s.c_str());
+    if (s == "ENROLL") {
+      currentState = ENROLL;
+    } else {
+      currentState = VERIFY;
+      bottomMsg    = "Place finger...";
+      oledShowState();
     }
-    currentState = VERIFY;
-    bottomMsg = "Place finger...";
-    oledBottomRefresh();
   }
 
-  if (fbState == "VERIFY") verifyFingerNonBlocking();
+  // ── ENROLL state ────────────────────────────────────────────
+  if (currentState == ENROLL) {
+    oledBottom("Enrollment Started...", true);
+    Serial.println("[Enroll] Waiting for fp/enrollData...");
+
+    unsigned long waitStart = millis();
+    while (!newEnrollReceived && millis() - waitStart < 12000) {
+      mqttClient.loop();
+      if (millis() - lastTopUpdate > 1000) { oledTop(); lastTopUpdate = millis(); }
+      delay(50);
+    }
+
+    if (newEnrollReceived) {
+      newEnrollReceived = false;
+      Serial.printf("[Enroll] Data: name=%s regNum=%s\n",
+                    mqttEnrollNameBuf, mqttEnrollRegBuf);
+      enrollFinger();
+      oledBottom("Enrollment Complete!", true);
+      delay(1000);
+    } else {
+      Serial.println("[Enroll] Timeout — no fp/enrollData received");
+      oledBottom("No enroll data!", true);
+      digitalWrite(RED_LED, HIGH); delay(1500); digitalWrite(RED_LED, LOW);
+    }
+
+    memset(mqttEnrollNameBuf, 0, STUDENT_NAME_LEN);
+    memset(mqttEnrollRegBuf,  0, STUDENT_REG_LEN);
+    newEnrollReceived = false;
+
+    currentState = VERIFY;
+    mqttPublish(TOPIC_STATE_PUB, "VERIFY", true);
+    bottomMsg = "Place finger...";
+    oledShowState();
+  }
+
+  // ── VERIFY state ────────────────────────────────────────────
+  if (currentState == VERIFY) {
+    verifyFingerNonBlocking();
+  }
+
   delay(10);
 }
 
-// ---------------- OLED ----------------
+// ================================================================
+//  MQTT CALLBACK
+// ================================================================
+void mqttCallback(char *topic, byte *payload, unsigned int length) {
+  char buf[MQTT_BUF_SIZE];
+  unsigned int len = min(length, (unsigned int)(MQTT_BUF_SIZE - 1));
+  memcpy(buf, payload, len);
+  buf[len] = '\0';
+
+  String topicStr(topic);
+  Serial.printf("[MQTT] ← %s : %s\n", topic, buf);
+
+  if (topicStr == TOPIC_SYS_STATE) {
+    strncpy(mqttStateBuf, buf, sizeof(mqttStateBuf) - 1);
+    mqttStateBuf[sizeof(mqttStateBuf) - 1] = '\0';
+    newStateReceived = true;
+    return;
+  }
+
+  if (topicStr == TOPIC_ENROLL_DATA) {
+    StaticJsonDocument<256> doc;
+    if (deserializeJson(doc, buf) == DeserializationError::Ok) {
+      strncpy(mqttEnrollNameBuf, doc["name"]   | "", STUDENT_NAME_LEN - 1);
+      strncpy(mqttEnrollRegBuf,  doc["regNum"] | "", STUDENT_REG_LEN  - 1);
+      mqttEnrollNameBuf[STUDENT_NAME_LEN - 1] = '\0';
+      mqttEnrollRegBuf[STUDENT_REG_LEN   - 1] = '\0';
+      newEnrollReceived = true;
+      Serial.printf("[MQTT] Enroll parsed: %s / %s\n",
+                    mqttEnrollNameBuf, mqttEnrollRegBuf);
+    } else {
+      Serial.println("[MQTT] fp/enrollData parse FAILED");
+    }
+    return;
+  }
+}
+
+// ================================================================
+//  MQTT publish helper
+// ================================================================
+bool mqttPublish(const char *topic, const String &payload, bool retained) {
+  if (!mqttClient.connected()) return false;
+  bool ok = mqttClient.publish(topic, payload.c_str(), retained);
+  Serial.printf("[MQTT] %s → %s\n", ok ? "PUB" : "FAIL", topic);
+  return ok;
+}
+
+// ================================================================
+//  OLED — top half
+//  Added NTP sync indicator: "T:Ok" / "T:X"
+// ================================================================
 void oledTop() {
   display.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
   display.setTextSize(1);
 
+  // Row 0: WiFi | MQTT | Time sync status
   display.setCursor(0, 0);
   display.print(WiFi.status() == WL_CONNECTED ? "WiFi:Ok" : "WiFi:X");
-  display.setCursor(SCREEN_WIDTH - 32, 0);
-  display.print(firebaseReady ? "FB:Ok" : "FB:X");
+  display.setCursor(85, 0);
+  display.print(mqttConnected ? "MQTT:Ok" : "MQTT:X");
 
+  // Row 1: Date & time centred
   struct tm t;
-  char buf[20];
-  int dateY = 20;
-  if (getLocalTime(&t)) {
-    strftime(buf, sizeof(buf), "%d-%m | %H:%M", &t);
-    display.getTextBounds(buf, 0, dateY, &tx1, &ty1, &tw, &th);
-    display.setCursor((SCREEN_WIDTH - tw) / 2, dateY);
-    display.println(buf);
+  char buf[22];
+  if (isTimeSynced() && getLocalTime(&t)) {
+    strftime(buf, sizeof(buf), "%d-%m | %H:%M:%S", &t);
   } else {
-    display.setCursor(10, dateY);
-    display.println("--:--:--");
+    strncpy(buf, "No time sync", sizeof(buf));
   }
+  display.getTextBounds(buf, 0, 20, &tx1, &ty1, &tw, &th);
+  display.setCursor((SCREEN_WIDTH - tw) / 2, 20);
+  display.println(buf);
 
-  String devInfo = "FOC - SE";
+  // Row 2: Device label
+  String label = "FOC - SE";
   display.setTextSize(2);
-  display.getTextBounds(devInfo, 0, 40, &tx1, &ty1, &tw, &th);
+  display.getTextBounds(label, 0, 40, &tx1, &ty1, &tw, &th);
   display.setCursor((SCREEN_WIDTH - tw) / 2, 40);
-  display.println(devInfo);
+  display.println(label);
   display.setTextSize(1);
 
-  display.drawLine(0, SCREEN_HEIGHT/2 - 1, SCREEN_WIDTH, SCREEN_HEIGHT/2 - 1, SH110X_WHITE);
-  
-
+  display.drawLine(0, SCREEN_HEIGHT / 2 - 1,
+                   SCREEN_WIDTH, SCREEN_HEIGHT / 2 - 1, SH110X_WHITE);
   display.display();
 }
 
-void oledBottom(const String &msg, uint8_t line, bool sendToFirebase) {
+// ================================================================
+//  OLED — bottom half
+// ================================================================
+void oledBottom(const String &msg, bool sendToMQTT) {
   bottomMsg = msg;
   display.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
-  display.setCursor(0, SCREEN_HEIGHT / 2);
+  display.setCursor(0, SCREEN_HEIGHT / 2 + 2);
   display.println(bottomMsg);
 
-  if (WiFi.status() != WL_CONNECTED || !firebaseReady) {
+  if (WiFi.status() != WL_CONNECTED || !mqttConnected) {
     display.setCursor(0, SCREEN_HEIGHT - 10);
     display.print("Offline: ");
     display.print(offlineCount);
   }
-
   display.display();
 
-  // optionally notify firebase about messages (if requested)
-  if (sendToFirebase && firebaseReady) {
-    FirebaseJson json;
-    json.set("msg", bottomMsg);
-    Firebase.RTDB.pushJSON(&fbdo, "/messages", &json);
+  if (sendToMQTT && mqttConnected) {
+    StaticJsonDocument<128> doc;
+    doc["msg"] = bottomMsg;
+    String p;
+    serializeJson(doc, p);
+    mqttPublish(TOPIC_MESSAGE, p);
   }
 }
 
-void oledBottomRefresh() { 
-  oledBottom(bottomMsg);
- }
+void oledBottomRefresh() { oledBottom(bottomMsg); }
 
-// ---------------- OLED progress bar ----------------
-void oledProgressBar(uint8_t percent) {
-  uint8_t barWidth = SCREEN_WIDTH - 4;
-  uint8_t fillWidth = (barWidth * percent) / 100;
-
-  display.fillRect(2, SCREEN_HEIGHT - 12, barWidth, 10, SH110X_BLACK);
-  display.drawRect(2, SCREEN_HEIGHT - 12, barWidth, 10, SH110X_WHITE);
-  if (fillWidth > 0) display.fillRect(2, SCREEN_HEIGHT - 12, fillWidth, 10, SH110X_WHITE);
+void oledShowState() {
+  display.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
+  display.setTextSize(2);
+  String stateLabel = (currentState == ENROLL) ? "ENROLL" : "VERIFY";
+  display.getTextBounds(stateLabel, 0, SCREEN_HEIGHT / 2 + 2, &tx1, &ty1, &tw, &th);
+  display.setCursor((SCREEN_WIDTH - tw) / 2, SCREEN_HEIGHT / 2 + 2);
+  display.println(stateLabel);
+  display.setTextSize(1);
+  display.setCursor(0, SCREEN_HEIGHT / 2 + 22);
+  display.println(bottomMsg);
+  if (WiFi.status() != WL_CONNECTED || !mqttConnected) {
+    display.setCursor(0, SCREEN_HEIGHT - 10);
+    display.print("Offline: ");
+    display.print(offlineCount);
+  }
   display.display();
 }
 
-// ---------------- Firebase ----------------
-bool writeFirebase(const String &path, FirebaseJson &json) {
-  if (!firebaseReady) return false;
-  bool ok = Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json);
-  if (!ok) Serial.printf("Firebase write failed: %s\n", fbdo.errorReason().c_str());
-  else Serial.printf("Firebase wrote: %s\n", path.c_str());
-  return ok;
+void oledProgressBar(uint8_t percent) {
+  uint8_t barWidth  = SCREEN_WIDTH - 4;
+  uint8_t fillWidth = (barWidth * percent) / 100;
+  display.fillRect(2, SCREEN_HEIGHT - 12, barWidth, 10, SH110X_BLACK);
+  display.drawRect(2, SCREEN_HEIGHT - 12, barWidth, 10, SH110X_WHITE);
+  if (fillWidth > 0)
+    display.fillRect(2, SCREEN_HEIGHT - 12, fillWidth, 10, SH110X_WHITE);
+  display.display();
 }
 
-// ---------------- Timestamp ----------------
-String getTimestamp() {
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) return "1970-01-01T00:00:00";
-  char buffer[TS_LEN];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &timeinfo);
-  return String(buffer);
-}
-
-// ---------------- Enrollment ----------------
-void enrollFinger(FirebaseJson &enrollDataJson) {
+// ================================================================
+//  ENROLLMENT
+// ================================================================
+void enrollFinger() {
   if (studentCount >= MAX_STUDENTS) {
-    oledBottom("Max students!", 0, true);
+    oledBottom("Max students!", true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
-  String name, regNum;
-  if (!readEnrollData(enrollDataJson, name, regNum)) {
-    oledBottom("Invalid data!", 0, true);
+  String name   = String(mqttEnrollNameBuf);
+  String regNum = String(mqttEnrollRegBuf);
+
+  if (name.length() == 0 || regNum.length() == 0) {
+    oledBottom("Invalid data!", true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
     return;
   }
 
   uint8_t id = studentCount + 1;
-  int p = -1;
+  int p      = -1;
 
-  // Wait for first finger (with simple progress animation)
-  unsigned long start = millis();
+  // ── First finger placement ───────────────────────────────
   oledProgressBar(0);
-  oledBottom("Place finger to enroll...", 0, true);
+  oledBottom("Place finger to enroll...", true);
+  unsigned long start = millis();
+
   while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    if (p != FINGERPRINT_NOFINGER) oledBottom("Image error!", 0, true);
-    uint8_t elapsedPercent = min(100UL, (millis() - start) * 100UL / 15000UL);
-    oledProgressBar(elapsedPercent);
-    if (millis() - start > 15000UL) { oledBottom("Enroll timeout", 0, true); oledProgressBar(0); return; }
+    if (p != FINGERPRINT_NOFINGER) oledBottom("Image error!", true);
+    oledProgressBar((uint8_t)min(100UL, (millis() - start) * 100UL / 15000UL));
+    if (millis() - lastTopUpdate > 1000) { oledTop(); lastTopUpdate = millis(); }
+    if (millis() - start > 15000UL) {
+      oledBottom("Enroll timeout", true);
+      oledProgressBar(0);
+      return;
+    }
     delay(80);
   }
   oledProgressBar(0);
 
-  if (finger.image2Tz(1) != FINGERPRINT_OK) { oledBottom("Image fail", 0, true); digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW); return; }
-
-  if (finger.fingerSearch() == FINGERPRINT_OK) {
-    oledBottom("Already Enrolled!", 0, true);
+  if (finger.image2Tz(1) != FINGERPRINT_OK) {
+    oledBottom("Image fail", true);
     digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
-    if (firebaseReady) Firebase.RTDB.deleteNode(&fbdo, "/messages");
     return;
   }
 
-  oledBottom("Remove finger", 0, true); delay(800);
+  if (finger.fingerSearch() == FINGERPRINT_OK) {
+    oledBottom("Already Enrolled!", true);
+    digitalWrite(RED_LED, HIGH); delay(1000); digitalWrite(RED_LED, LOW);
+    return;
+  }
+
+  oledBottom("Remove finger", true);
+  delay(800);
   while (finger.getImage() != FINGERPRINT_NOFINGER) delay(20);
 
-  // second placement
-  start = millis();
+  // ── Second finger placement ──────────────────────────────
   oledProgressBar(0);
-  oledBottom("Place again...", 0, true);
+  oledBottom("Place again...", true);
+  start = millis();
+
   while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    if (p != FINGERPRINT_NOFINGER) oledBottom("Image error!", 0, true);
-    uint8_t elapsedPercent = min(100UL, (millis() - start) * 100UL / 15000UL);
-    oledProgressBar(elapsedPercent);
-    if (millis() - start > 15000UL) { oledBottom("Enroll timeout", 0, true); oledProgressBar(0); return; }
+    if (p != FINGERPRINT_NOFINGER) oledBottom("Image error!", true);
+    oledProgressBar((uint8_t)min(100UL, (millis() - start) * 100UL / 15000UL));
+    if (millis() - lastTopUpdate > 1000) { oledTop(); lastTopUpdate = millis(); }
+    if (millis() - start > 15000UL) {
+      oledBottom("Enroll timeout", true);
+      oledProgressBar(0);
+      return;
+    }
     delay(80);
   }
   oledProgressBar(0);
 
-  if (finger.image2Tz(2) != FINGERPRINT_OK) { oledBottom("2nd fail", 0, true); digitalWrite(RED_LED, HIGH); delay(900); digitalWrite(RED_LED, LOW); return; }
+  if (finger.image2Tz(2) != FINGERPRINT_OK) {
+    oledBottom("2nd fail", true);
+    digitalWrite(RED_LED, HIGH); delay(900); digitalWrite(RED_LED, LOW);
+    return;
+  }
+  if (finger.createModel() != FINGERPRINT_OK) {
+    oledBottom("Model fail", true);
+    digitalWrite(RED_LED, HIGH); delay(900); digitalWrite(RED_LED, LOW);
+    return;
+  }
+  if (finger.storeModel(id) != FINGERPRINT_OK) {
+    oledBottom("Store fail", true);
+    digitalWrite(RED_LED, HIGH); delay(900); digitalWrite(RED_LED, LOW);
+    return;
+  }
 
-  if (finger.createModel() != FINGERPRINT_OK) { oledBottom("Model fail", 0, true); digitalWrite(RED_LED, HIGH); delay(900); digitalWrite(RED_LED, LOW); return; }
-  if (finger.storeModel(id) != FINGERPRINT_OK) { oledBottom("Store fail", 0, true); digitalWrite(RED_LED, HIGH); delay(900); digitalWrite(RED_LED, LOW); return; }
-
-  // save student
+  // ── Save to RAM + EEPROM ─────────────────────────────────
   students[studentCount].id = id;
-  memset(students[studentCount].name, 0, STUDENT_NAME_LEN);
-  name.toCharArray(students[studentCount].name, STUDENT_NAME_LEN);
+  memset(students[studentCount].name,   0, STUDENT_NAME_LEN);
   memset(students[studentCount].regNum, 0, STUDENT_REG_LEN);
+  name.toCharArray(students[studentCount].name,     STUDENT_NAME_LEN);
   regNum.toCharArray(students[studentCount].regNum, STUDENT_REG_LEN);
   studentCount++;
   saveStudentsToEEPROM();
 
-  oledBottom("Enroll Success: " + name, 0, true);
-  digitalWrite(GREEN_LED, HIGH); delay(900); digitalWrite(GREEN_LED, LOW);
+  // ── Publish enrolled student ─────────────────────────────
+  StaticJsonDocument<256> doc;
+  doc["id"]        = id;
+  doc["name"]      = name;
+  doc["regNum"]    = regNum;
+  doc["enrolledAt"] = getTimestamp();   // include enroll time for audit
+  String payload;
+  serializeJson(doc, payload);
+  mqttPublish(TOPIC_ENROLLED, payload);
 
-  if (firebaseReady) {
-    String path = "/students/" + String(id);
-    FirebaseJson json;
-    json.set("id", id);
-    json.set("name", name);
-    json.set("regNum", regNum);
-    writeFirebase(path, json);
-    Firebase.RTDB.deleteNode(&fbdo, "/messages");
-  }
+  oledBottom("Enroll Success: " + name, true);
+  Serial.printf("[Enroll] OK id=%d name=%s\n", id, name.c_str());
+  digitalWrite(GREEN_LED, HIGH); delay(900); digitalWrite(GREEN_LED, LOW);
 }
 
-// ---------------- Verification ----------------
+// ================================================================
+//  VERIFICATION  (non-blocking, polled every 200 ms)
+//
+//  Key change: if time is NOT synced, attendance goes to the offline
+//  buffer with a placeholder timestamp. The record is only synced
+//  to Firebase after NTP confirms time is valid — preventing bad
+//  timestamps from reaching your database.
+// ================================================================
 void verifyFingerNonBlocking() {
   static unsigned long lastCheck = 0;
   if (millis() - lastCheck < 200) return;
@@ -384,96 +710,211 @@ void verifyFingerNonBlocking() {
 
   int p = finger.getImage();
   if (p == FINGERPRINT_NOFINGER) {
-    oledBottom("Place finger...");
+    // Show time-sync warning if clock isn't ready
+    if (!isTimeSynced()) {
+      oledBottom("No time sync!");
+    } else {
+      oledBottom("Place finger...");
+    }
     return;
   }
-  if (p != FINGERPRINT_OK) {
-    oledBottom("Image error!");
-    return;
-  }
-
+  if (p != FINGERPRINT_OK)       { oledBottom("Image error!");     return; }
   if (finger.image2Tz(1) != FINGERPRINT_OK) {
-    oledBottom("Image conv fail");
-    return;
+    oledBottom("Image conv fail"); return;
   }
 
   if (finger.fingerFastSearch() == FINGERPRINT_OK) {
-    uint8_t id = finger.fingerID;
-    String name = "Unknown", regNum = "";
+    uint8_t id     = finger.fingerID;
+    String  name   = "Unknown";
+    String  regNum = "";
+
     for (uint8_t i = 0; i < studentCount; i++) {
       if (students[i].id == id) {
-        name = String(students[i].name);
+        name   = String(students[i].name);
         regNum = String(students[i].regNum);
         break;
       }
     }
 
-    oledBottom("Welcome:\n-> " + name);
-    digitalWrite(GREEN_LED, HIGH); delay(180); digitalWrite(GREEN_LED, LOW);
+    // ── Capture timestamp at the moment of scan ──────────
+    //    This is the most important moment — clock must be read NOW.
     String timestamp = getTimestamp();
-    Serial.printf("Verified id=%d name=%s time=%s\n", id, name.c_str(), timestamp.c_str());
+    bool   timeSyncOk = (timestamp.length() > 0);
 
-    // create Attendance record (zero padded)
+    if (!timeSyncOk) {
+      // Time not ready — show warning and store offline with epoch 0
+      // The bridge will reject epoch-0 timestamps; record is kept
+      // locally until a valid time is available.
+      Serial.println("[Verify] Time not synced — storing offline with placeholder");
+      oledBottom("No time sync!\nStored offline.");
+    } else {
+      oledBottom("Welcome:\n-> " + name);
+    }
+
+    digitalWrite(GREEN_LED, HIGH); delay(180); digitalWrite(GREEN_LED, LOW);
+    Serial.printf("[Verify] id=%d name=%s ts=%s synced=%d\n",
+                  id, name.c_str(), timestamp.c_str(), (int)timeSyncOk);
+
+    // Build attendance record
     Attendance rec;
     rec.id = id;
-    memset(rec.name, 0, STUDENT_NAME_LEN);
-    name.toCharArray(rec.name, STUDENT_NAME_LEN);
-    memset(rec.regNum, 0, STUDENT_REG_LEN);
-    regNum.toCharArray(rec.regNum, STUDENT_REG_LEN);
+    memset(rec.name,      0, STUDENT_NAME_LEN);
+    memset(rec.regNum,    0, STUDENT_REG_LEN);
     memset(rec.timestamp, 0, TS_LEN);
-    timestamp.toCharArray(rec.timestamp, TS_LEN);
+    name.toCharArray(rec.name,           STUDENT_NAME_LEN);
+    regNum.toCharArray(rec.regNum,       STUDENT_REG_LEN);
+    if (timeSyncOk) {
+      timestamp.toCharArray(rec.timestamp, TS_LEN);
+    } else {
+      strncpy(rec.timestamp, "1970-01-01T00:00:00+05:30", TS_LEN - 1);
+    }
 
-    if (firebaseReady) {
-      FirebaseJson json;
-      json.set("id", id);
-      json.set("name", name);
-      json.set("regNum", regNum);
-      json.set("timestamp", timestamp);
-      // sanitize path key just in case
-      String tsSafe = sanitizeKey(timestamp);
-      String path = "/attendance/" + String(id) + "_" + tsSafe;
-      if (!writeFirebase(path, json)) {
-        if (offlineCount < MAX_OFFLINE_ATTENDANCE) {
-          offlineAttendance[offlineCount] = rec;
-          offlineCount++;
-          saveOfflineAttendanceToEEPROM();
-          oledBottom("Saved offline!");
-          Serial.println("Saved offline (write failed)");
-        } else oledBottom("Offline full!");
-      }
+    // Build JSON payload — include ntpSynced flag so bridge can validate
+    StaticJsonDocument<300> doc;
+    doc["id"]        = id;
+    doc["name"]      = name;
+    doc["regNum"]    = regNum;
+    doc["timestamp"] = rec.timestamp;
+    doc["ntpSynced"] = timeSyncOk;
+    String payload;
+    serializeJson(doc, payload);
+
+    // ── Publish or store offline ──────────────────────────
+    //    Even if MQTT is connected, don't send records with bad timestamps.
+    //    They'll be stored offline and synced after NTP recovers.
+    bool shouldPublish = mqttConnected && timeSyncOk;
+
+    if (shouldPublish && mqttPublish(TOPIC_ATTENDANCE, payload)) {
+      // Published OK
     } else {
       if (offlineCount < MAX_OFFLINE_ATTENDANCE) {
         offlineAttendance[offlineCount] = rec;
         offlineCount++;
         saveOfflineAttendanceToEEPROM();
-        oledBottom("Offline stored!");
-        Serial.println("Stored offline (no connectivity)");
-      } else oledBottom("Offline full!");
+        if (!timeSyncOk) {
+          oledBottom("No time — stored!");
+        } else {
+          oledBottom(mqttConnected ? "Saved offline!" : "Offline stored!");
+        }
+        Serial.println("[Verify] Stored offline");
+      } else {
+        oledBottom("Offline full!");
+        Serial.println("[Verify] Offline buffer full");
+      }
     }
   } else {
     oledBottom("No Match!");
-    digitalWrite(RED_LED, HIGH);
-    delay(150);
-    digitalWrite(RED_LED, LOW);
+    digitalWrite(RED_LED, HIGH); delay(150); digitalWrite(RED_LED, LOW);
   }
 }
 
-// ---------------- WiFi & Firebase ----------------
+// ================================================================
+//  WiFi reconnect
+// ================================================================
 void reconnectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
-  Serial.println("Reconnecting WiFi...");
+  Serial.println("[WiFi] Reconnecting...");
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) delay(200);
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000)
+    delay(200);
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[WiFi] Connected: " + WiFi.localIP().toString());
+    // Trigger NTP resync now that we have connectivity again
+    triggerNTPResync();
+    lastNTPResync = millis();
+  } else {
+    Serial.println("[WiFi] Failed");
+  }
 }
 
-void reconnectFirebase() {
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
+// ================================================================
+//  MQTT reconnect
+// ================================================================
+void reconnectMQTT() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (mqttClient.connected()) { mqttConnected = true; return; }
+
+  String clientId = String(MQTT_CLIENT_ID) + "_" +
+                    String((uint32_t)ESP.getEfuseMac(), HEX);
+  Serial.printf("[MQTT] Connecting as %s...\n", clientId.c_str());
+
+  if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
+    mqttConnected = true;
+    mqttClient.subscribe(TOPIC_SYS_STATE,   1);
+    mqttClient.subscribe(TOPIC_ENROLL_DATA, 1);
+    Serial.println("[MQTT] Connected & subscribed");
+    mqttPublish(TOPIC_STATE_PUB, "VERIFY", true);
+    mqttPublish(TOPIC_MESSAGE,   "ESP32 online");
+  } else {
+    mqttConnected = false;
+    Serial.printf("[MQTT] Failed, state=%d\n", mqttClient.state());
+  }
 }
 
-// ---------------- EEPROM helpers ----------------
+// ================================================================
+//  Offline sync
+//  Only syncs records that have a valid (non-epoch-0) timestamp.
+//  Records with placeholder timestamps are left in the buffer
+//  until NTP confirms time is good.
+// ================================================================
+void syncOfflineAttendance() {
+  if (offlineCount == 0) return;
+  if (!isTimeSynced()) {
+    Serial.println("[Sync] Skipped — time not synced");
+    return;
+  }
+
+  oledBottom("Syncing offline...");
+  Serial.printf("[Sync] Syncing %d records...\n", offlineCount);
+
+  int i = 0;
+  while (i < offlineCount) {
+    // Skip placeholder records — they have an epoch-0 timestamp
+    if (strncmp(offlineAttendance[i].timestamp, "1970", 4) == 0) {
+      Serial.printf("[Sync] Skipping record %d — bad timestamp\n", i);
+      i++;
+      continue;
+    }
+
+    uint8_t percent = ((i + 1) * 100) / (offlineCount ? offlineCount : 1);
+    oledProgressBar(percent);
+
+    StaticJsonDocument<300> doc;
+    doc["id"]        = offlineAttendance[i].id;
+    doc["name"]      = String(offlineAttendance[i].name);
+    doc["regNum"]    = String(offlineAttendance[i].regNum);
+    doc["timestamp"] = String(offlineAttendance[i].timestamp);
+    doc["ntpSynced"] = true;
+    String payload;
+    serializeJson(doc, payload);
+
+    if (mqttPublish(TOPIC_ATTENDANCE, payload)) {
+      removeOfflineRecordAt(i);   // shifts left; do NOT increment i
+    } else {
+      Serial.printf("[Sync] Failed at record %d — retry later\n", i);
+      oledBottom("Sync failed! Retry later...");
+      break;
+    }
+    delay(200);
+  }
+
+  oledProgressBar(0);
+  oledBottom("Sync complete!");
+}
+
+void removeOfflineRecordAt(uint8_t idx) {
+  if (idx >= offlineCount) return;
+  for (uint8_t i = idx; i < offlineCount - 1; i++)
+    offlineAttendance[i] = offlineAttendance[i + 1];
+  offlineCount--;
+  saveOfflineAttendanceToEEPROM();
+}
+
+// ================================================================
+//  EEPROM helpers
+// ================================================================
 bool safeEEPROMWrite(int addr, const uint8_t *buf, size_t len) {
   if (addr < 0 || (addr + (int)len) > EEPROM_SIZE) return false;
   for (size_t i = 0; i < len; i++) EEPROM.write(addr + i, buf[i]);
@@ -484,24 +925,26 @@ void saveStudentsToEEPROM() {
   int addr = 0;
   EEPROM.write(addr++, studentCount);
   for (int i = 0; i < studentCount; i++) {
-    safeEEPROMWrite(addr, (uint8_t *)&students[i].id, 1); addr += 1;
-    safeEEPROMWrite(addr, (uint8_t *)students[i].name, STUDENT_NAME_LEN); addr += STUDENT_NAME_LEN;
-    safeEEPROMWrite(addr, (uint8_t *)students[i].regNum, STUDENT_REG_LEN); addr += STUDENT_REG_LEN;
+    safeEEPROMWrite(addr, (uint8_t *)&students[i].id,    1);                addr += 1;
+    safeEEPROMWrite(addr, (uint8_t *)students[i].name,   STUDENT_NAME_LEN); addr += STUDENT_NAME_LEN;
+    safeEEPROMWrite(addr, (uint8_t *)students[i].regNum, STUDENT_REG_LEN);  addr += STUDENT_REG_LEN;
   }
   EEPROM.commit();
-  Serial.printf("Students saved (%d)\n", studentCount);
+  Serial.printf("[EEPROM] Students saved: %d\n", studentCount);
 }
 
 void loadStudentsFromEEPROM() {
-  int addr = 0;
-  uint8_t cnt = EEPROM.read(addr++);
+  int     addr = 0;
+  uint8_t cnt  = EEPROM.read(addr++);
   studentCount = (cnt > MAX_STUDENTS) ? 0 : cnt;
   for (int i = 0; i < studentCount; i++) {
     students[i].id = EEPROM.read(addr++);
-    for (int j = 0; j < STUDENT_NAME_LEN; j++) students[i].name[j] = EEPROM.read(addr++);
-    for (int j = 0; j < STUDENT_REG_LEN; j++) students[i].regNum[j] = EEPROM.read(addr++);
+    for (int j = 0; j < STUDENT_NAME_LEN; j++) students[i].name[j]   = EEPROM.read(addr++);
+    for (int j = 0; j < STUDENT_REG_LEN;  j++) students[i].regNum[j] = EEPROM.read(addr++);
+    students[i].name[STUDENT_NAME_LEN - 1]  = '\0';
+    students[i].regNum[STUDENT_REG_LEN - 1] = '\0';
   }
-  Serial.printf("Loaded %d students\n", studentCount);
+  Serial.printf("[EEPROM] Loaded %d students\n", studentCount);
 }
 
 void saveOfflineAttendanceToEEPROM() {
@@ -509,94 +952,40 @@ void saveOfflineAttendanceToEEPROM() {
   EEPROM.write(addr++, offlineCount);
   for (int i = 0; i < offlineCount; i++) {
     EEPROM.write(addr++, offlineAttendance[i].id);
-    safeEEPROMWrite(addr, (uint8_t *)offlineAttendance[i].name, STUDENT_NAME_LEN); addr += STUDENT_NAME_LEN;
-    safeEEPROMWrite(addr, (uint8_t *)offlineAttendance[i].regNum, STUDENT_REG_LEN); addr += STUDENT_REG_LEN;
-    safeEEPROMWrite(addr, (uint8_t *)offlineAttendance[i].timestamp, TS_LEN); addr += TS_LEN;
+    safeEEPROMWrite(addr, (uint8_t *)offlineAttendance[i].name,      STUDENT_NAME_LEN); addr += STUDENT_NAME_LEN;
+    safeEEPROMWrite(addr, (uint8_t *)offlineAttendance[i].regNum,    STUDENT_REG_LEN);  addr += STUDENT_REG_LEN;
+    safeEEPROMWrite(addr, (uint8_t *)offlineAttendance[i].timestamp, TS_LEN);           addr += TS_LEN;
   }
   EEPROM.commit();
-  Serial.printf("Offline saved (%d)\n", offlineCount);
+  Serial.printf("[EEPROM] Offline saved: %d\n", offlineCount);
 }
 
 void loadOfflineAttendanceFromEEPROM() {
-  int addr = OFFLINE_START_ADDR;
-  uint8_t cnt = EEPROM.read(addr++);
+  int     addr = OFFLINE_START_ADDR;
+  uint8_t cnt  = EEPROM.read(addr++);
   if (cnt > MAX_OFFLINE_ATTENDANCE) cnt = 0;
   offlineCount = 0;
   for (int i = 0; i < cnt; i++) {
     offlineAttendance[i].id = EEPROM.read(addr++);
-    for (int j = 0; j < STUDENT_NAME_LEN; j++) offlineAttendance[i].name[j] = EEPROM.read(addr++);
-    for (int j = 0; j < STUDENT_REG_LEN; j++) offlineAttendance[i].regNum[j] = EEPROM.read(addr++);
-    for (int j = 0; j < TS_LEN; j++) offlineAttendance[i].timestamp[j] = EEPROM.read(addr++);
-    // ensure null-termination in case data truncated
-    offlineAttendance[i].name[STUDENT_NAME_LEN - 1] = '\0';
+    for (int j = 0; j < STUDENT_NAME_LEN; j++) offlineAttendance[i].name[j]      = EEPROM.read(addr++);
+    for (int j = 0; j < STUDENT_REG_LEN;  j++) offlineAttendance[i].regNum[j]    = EEPROM.read(addr++);
+    for (int j = 0; j < TS_LEN;           j++) offlineAttendance[i].timestamp[j] = EEPROM.read(addr++);
+    offlineAttendance[i].name[STUDENT_NAME_LEN - 1]  = '\0';
     offlineAttendance[i].regNum[STUDENT_REG_LEN - 1] = '\0';
-    offlineAttendance[i].timestamp[TS_LEN - 1] = '\0';
+    offlineAttendance[i].timestamp[TS_LEN - 1]       = '\0';
     offlineCount++;
   }
-  Serial.printf("Loaded offline records: %d\n", offlineCount);
+  Serial.printf("[EEPROM] Loaded %d offline records\n", offlineCount);
 }
 
-// ---------------- Offline Sync ----------------
-void syncOfflineAttendance() {
-  if (offlineCount == 0) return;
-  oledBottom("Syncing offline...");
-  int i = 0;
-  while (i < offlineCount) {
-    uint8_t percent = ((i + 1) * 100) / (offlineCount ? offlineCount : 1);
-    oledProgressBar(percent);
-
-    FirebaseJson json;
-    json.set("id", offlineAttendance[i].id);
-    json.set("name", String(offlineAttendance[i].name));
-    json.set("regNum", String(offlineAttendance[i].regNum));
-    json.set("timestamp", String(offlineAttendance[i].timestamp));
-
-    String ts = sanitizeKey(String(offlineAttendance[i].timestamp));
-    String path = "/attendance/" + String(offlineAttendance[i].id) + "_" + ts;
-
-    if (writeFirebase(path, json)) {
-      removeOfflineRecordAt(i); // don't increment i, items shift left
-    } else {
-      Serial.printf("Failed to sync record %d, will retry later\n", i);
-      oledBottom("Sync failed! Retry later...");
-      break;
-    }
-    delay(200);
-  }
-  oledProgressBar(0);
-  oledBottom("Sync complete!");
-}
-
-void removeOfflineRecordAt(uint8_t idx) {
-  if (idx >= offlineCount) return;
-  for (uint8_t i = idx; i < offlineCount - 1; i++) offlineAttendance[i] = offlineAttendance[i + 1];
-  offlineCount--;
-  saveOfflineAttendanceToEEPROM();
-}
-
-// ---------------- Enroll Data Reader ----------------
-bool readEnrollData(FirebaseJson &json, String &name, String &regNum) {
-  FirebaseJsonData data;
-  // get name
-  if (!json.get(data, "name")) return false;
-  name = data.stringValue;
-  // get regNum
-  if (!json.get(data, "regNum")) return false;
-  regNum = data.stringValue;
-  return true;
-}
-
-// ---------------- Utility ----------------
+// ================================================================
+//  Utility
+// ================================================================
 String sanitizeKey(const String &s) {
   String out = s;
-  // Firebase RTDB keys cannot contain . # $ [ ]
-  out.replace('.', '-');
-  out.replace('#', '-');
-  out.replace('$', '-');
-  out.replace('[', '-');
-  out.replace(']', '-');
-  // trim whitespace (just in case)
-  out.trim();
+  out.replace('.', '-'); out.replace('#', '-');
+  out.replace('$', '-'); out.replace('[', '-');
+  out.replace(']', '-'); out.trim();
   if (out.length() == 0) out = "unknown";
   return out;
 }
