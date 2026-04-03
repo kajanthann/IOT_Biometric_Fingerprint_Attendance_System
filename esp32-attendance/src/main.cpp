@@ -7,73 +7,55 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "time.h"
-#include "esp_sntp.h"          // ← needed for sntp_get_sync_status()
+#include "esp_sntp.h"
 #include "secrets.h"
 #include <EEPROM.h>
 
-// ================================================================
 //  OLED
-// ================================================================
 #define SCREEN_WIDTH  128
 #define SCREEN_HEIGHT 128
 Adafruit_SH1107 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
 int16_t  tx1, ty1;
 uint16_t tw, th;
-String   bottomMsg      = "Waiting...";
+String   bottomMsg  = "Waiting...";
 unsigned long lastTopUpdate = 0;
 
-// ================================================================
 //  AS608
-// ================================================================
 HardwareSerial mySerial(1);
 #define RX_PIN 18
 #define TX_PIN 19
 Adafruit_Fingerprint finger(&mySerial);
 
-// ================================================================
 //  LEDs
-// ================================================================
 #define GREEN_LED 2
 #define RED_LED   4
 
-// ================================================================
 //  NTP / Time
-//
-//  IST = UTC+5:30 → gmtOffset_sec = 19800
-//  Change gmtOffset_sec for your timezone.
-//
-//  TS_LEN is now 26 to hold "YYYY-MM-DDTHH:MM:SS+05:30\0".
-//  ⚠ If you had data stored with the old 20-byte TS_LEN, clear
-//    EEPROM once after flashing (see clearEEPROM() helper below).
-// ================================================================
 const char *ntpServer          = "pool.ntp.org";
-const char *ntpServer2         = "time.cloudflare.com";   // fallback
-const long  gmtOffset_sec      = 19800;   // UTC+5:30 (IST)
+const char *ntpServer2         = "time.cloudflare.com";
+const long  gmtOffset_sec      = 19800;
 const int   daylightOffset_sec = 0;
-#define TZ_SUFFIX "+05:30"                // appended to every timestamp
+#define TZ_SUFFIX "+05:30"
 
-// Re-sync NTP every hour to prevent drift
 #define NTP_RESYNC_INTERVAL_MS  3600000UL
-// Maximum age of a "good" NTP sync before we consider time stale
-#define NTP_STALE_MS            7200000UL // 2 hours
+#define NTP_STALE_MS            7200000UL
 
-volatile bool ntpSynced       = false;
-unsigned long ntpSyncedAtMs   = 0;        // millis() when last sync confirmed
-unsigned long lastNTPResync   = 0;
+volatile bool ntpSynced     = false;
+unsigned long ntpSyncedAtMs = 0;
+unsigned long lastNTPResync = 0;
 
-// ================================================================
+// Welcome message 2-second hold
+// 0 = no hold active. Set to millis() on match. Cleared by loop() after 2000ms.
+unsigned long welcomeShownAt = 0;
+
 //  EEPROM layout
-//
-//  TS_LEN bumped from 20 → 26 to fit timezone suffix in timestamp.
-//  All other sizes unchanged.
-// ================================================================
 #define EEPROM_SIZE             4096
 #define MAX_STUDENTS            50
 #define MAX_OFFLINE_ATTENDANCE  30
 #define STUDENT_NAME_LEN        20
 #define STUDENT_REG_LEN         15
-#define TS_LEN                  26        // "YYYY-MM-DDTHH:MM:SS+05:30\0"
+#define TS_LEN                  26
 #define STUDENT_RECORD_SIZE     (1 + STUDENT_NAME_LEN + STUDENT_REG_LEN)
 #define STUDENTS_EEPROM_SIZE    (1 + (MAX_STUDENTS * STUDENT_RECORD_SIZE))
 #define OFFLINE_RECORD_SIZE     (1 + STUDENT_NAME_LEN + STUDENT_REG_LEN + TS_LEN)
@@ -81,26 +63,20 @@ unsigned long lastNTPResync   = 0;
 #define OFFLINE_START_ADDR      (STUDENTS_EEPROM_SIZE)
 
 #if (STUDENTS_EEPROM_SIZE + OFFLINE_EEPROM_SIZE) > EEPROM_SIZE
-  #error "EEPROM layout exceeds EEPROM_SIZE — reduce MAX_STUDENTS or MAX_OFFLINE_ATTENDANCE"
+  #error "EEPROM layout exceeds EEPROM_SIZE"
 #endif
 
-// ================================================================
 //  MQTT topics
-// ================================================================
 #define TOPIC_ATTENDANCE   "fp/attendance"
 #define TOPIC_ENROLLED     "fp/enrolled"
 #define TOPIC_HEARTBEAT    "fp/heartbeat"
 #define TOPIC_MESSAGE      "fp/message"
 #define TOPIC_STATE_PUB    "fp/stateAck"
-
 #define TOPIC_SYS_STATE    "fp/systemState"
 #define TOPIC_ENROLL_DATA  "fp/enrollData"
-
 #define MQTT_BUF_SIZE 512
 
-// ================================================================
 //  MQTT client
-// ================================================================
 WiFiClientSecure wifiSecure;
 PubSubClient     mqttClient(wifiSecure);
 bool             mqttConnected = false;
@@ -111,9 +87,7 @@ char mqttStateBuf[16]                    = "VERIFY";
 char mqttEnrollNameBuf[STUDENT_NAME_LEN] = {0};
 char mqttEnrollRegBuf[STUDENT_REG_LEN]   = {0};
 
-// ================================================================
 //  Data structures
-// ================================================================
 struct Student {
   uint8_t id;
   char    name[STUDENT_NAME_LEN];
@@ -134,9 +108,7 @@ uint8_t    offlineCount = 0;
 enum SystemState { VERIFY, ENROLL };
 SystemState currentState = VERIFY;
 
-// ================================================================
 //  Function prototypes
-// ================================================================
 void    oledTop();
 void    oledBottom(const String &msg, bool sendToMQTT = false);
 void    oledBottomRefresh();
@@ -161,36 +133,25 @@ void    removeOfflineRecordAt(uint8_t idx);
 bool    safeEEPROMWrite(int addr, const uint8_t *buf, size_t len);
 String  sanitizeKey(const String &s);
 
-// ================================================================
-//  NTP sync callback  (called by SNTP stack on every sync)
-// ================================================================
+// ─────────────────────────────────────────────────────────────
+//  NTP
+// ─────────────────────────────────────────────────────────────
 void ntpSyncCallback(struct timeval *tv) {
   ntpSynced     = true;
   ntpSyncedAtMs = millis();
   Serial.printf("[NTP] Synced — epoch=%llu\n", (unsigned long long)tv->tv_sec);
 }
 
-// ================================================================
-//  isTimeSynced()
-//  Returns true only if NTP has synced AND the sync is not stale.
-//  Stale = no re-sync for > NTP_STALE_MS (default 2 h).
-// ================================================================
 bool isTimeSynced() {
   if (!ntpSynced) return false;
   if ((millis() - ntpSyncedAtMs) > NTP_STALE_MS) {
-    // Time might have drifted — flag as unsynced until next resync confirms
     ntpSynced = false;
-    Serial.println("[NTP] Sync considered stale — forcing resync");
+    Serial.println("[NTP] Sync stale — forcing resync");
     return false;
   }
   return true;
 }
 
-// ================================================================
-//  waitForNTPSync()
-//  Blocks until SNTP confirms a sync, or times out.
-//  Returns true on success.
-// ================================================================
 bool waitForNTPSync(uint32_t timeoutMs = 10000) {
   uint32_t start = millis();
   while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET) {
@@ -205,28 +166,15 @@ bool waitForNTPSync(uint32_t timeoutMs = 10000) {
   return true;
 }
 
-// ================================================================
-//  triggerNTPResync()
-//  Forces SNTP to re-poll. Call periodically from the main loop.
-// ================================================================
 void triggerNTPResync() {
   Serial.println("[NTP] Forcing resync...");
-  // Re-configure restarts the SNTP polling immediately
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, ntpServer2);
-  // Don't block — sync callback will set ntpSynced when done
 }
 
-// ================================================================
-//  getTimestamp()
-//  Returns ISO-8601 timestamp with timezone suffix, e.g.:
-//    "2025-06-15T14:30:05+05:30"
-//  Returns empty string "" if time is not yet synced — callers
-//  must check for empty and handle offline storage accordingly.
-// ================================================================
 String getTimestamp() {
   if (!isTimeSynced()) {
-    Serial.println("[Time] Not synced — timestamp unavailable");
-    return "";   // empty = caller must not trust this timestamp
+    Serial.println("[Time] Not synced");
+    return "";
   }
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
@@ -234,14 +182,13 @@ String getTimestamp() {
     return "";
   }
   char buffer[TS_LEN];
-  // "2025-06-15T14:30:05+05:30"
   strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S" TZ_SUFFIX, &timeinfo);
   return String(buffer);
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  SETUP
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -252,12 +199,10 @@ void setup() {
   digitalWrite(GREEN_LED, LOW);
   digitalWrite(RED_LED,   LOW);
 
-  // EEPROM
   if (!EEPROM.begin(EEPROM_SIZE)) Serial.println("[EEPROM] begin failed!");
   loadStudentsFromEEPROM();
   loadOfflineAttendanceFromEEPROM();
 
-  // OLED
   Wire.begin(21, 22);
   if (!display.begin(0x3C, true)) {
     Serial.println(F("[OLED] init failed"));
@@ -269,7 +214,6 @@ void setup() {
   display.setTextColor(SH110X_WHITE);
   oledBottom("System Booting...");
 
-  // Fingerprint sensor
   mySerial.begin(57600, SERIAL_8N1, RX_PIN, TX_PIN);
   delay(100);
   oledBottom("Checking AS608...");
@@ -283,20 +227,17 @@ void setup() {
     while (1) delay(1);
   }
 
-  // WiFi
   oledBottom("Connecting WiFi...");
   reconnectWiFi();
   oledBottom(WiFi.status() == WL_CONNECTED ? "WiFi OK!" : "WiFi FAILED!");
 
-  // NTP — register callback BEFORE configTime so we never miss a sync event
   sntp_set_time_sync_notification_cb(ntpSyncCallback);
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, ntpServer2);
 
   oledBottom("Syncing time...");
   if (waitForNTPSync(12000)) {
-    // Confirm with a full getLocalTime check as belt-and-suspenders
     struct tm t;
-    if (getLocalTime(&t) && t.tm_year > 100) {   // year > 2000 = sane
+    if (getLocalTime(&t) && t.tm_year > 100) {
       oledBottom("Time synced!");
       Serial.printf("[NTP] OK: %04d-%02d-%02d %02d:%02d:%02d\n",
                     t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
@@ -308,12 +249,9 @@ void setup() {
     }
   } else {
     oledBottom("Time sync failed!");
-    // Not fatal — we continue; attendance will go to offline buffer
-    // and be synced when both WiFi and NTP recover.
   }
   lastNTPResync = millis();
 
-  // MQTT
   wifiSecure.setInsecure();
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
@@ -329,14 +267,13 @@ void setup() {
   oledShowState();
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  LOOP
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 unsigned long lastHeartbeat   = 0;
 unsigned long lastOfflineSync = 0;
 
 void loop() {
-  // ── Keep MQTT alive ─────────────────────────────────────────
   if (!mqttClient.connected()) {
     mqttConnected = false;
     reconnectMQTT();
@@ -345,27 +282,30 @@ void loop() {
   }
   mqttClient.loop();
 
-  // ── WiFi watchdog ───────────────────────────────────────────
   if (WiFi.status() != WL_CONNECTED) reconnectWiFi();
 
-  // ── Periodic NTP resync ─────────────────────────────────────
   if (WiFi.status() == WL_CONNECTED &&
       millis() - lastNTPResync > NTP_RESYNC_INTERVAL_MS) {
     triggerNTPResync();
     lastNTPResync = millis();
   }
 
-  // ── OLED top bar every second ───────────────────────────────
   if (millis() - lastTopUpdate > 1000) {
     oledTop();
     lastTopUpdate = millis();
   }
 
-  // ── Heartbeat every 2 s (only if time is valid) ─────────────
+  // ── Welcome message 2-second hold ──────────────────────────
+  // After 2s, clear hold and revert display to VERIFY state
+  if (welcomeShownAt > 0 && millis() - welcomeShownAt >= 2000) {
+    welcomeShownAt = 0;
+    bottomMsg = "Place finger...";
+    oledShowState();
+  }
+
   if (mqttConnected && millis() - lastHeartbeat > 2000) {
     String ts = getTimestamp();
     if (ts.length() > 0) {
-      // Publish JSON so the bridge knows both raw time and sync status
       StaticJsonDocument<128> hb;
       hb["ts"]     = ts;
       hb["synced"] = isTimeSynced();
@@ -376,15 +316,12 @@ void loop() {
     lastHeartbeat = millis();
   }
 
-  // ── Offline sync every 3 s (only when time is synced) ───────
-  //    We wait for a valid clock so synced records get real timestamps.
   if (mqttConnected && isTimeSynced() &&
       offlineCount > 0 && millis() - lastOfflineSync > 3000) {
     syncOfflineAttendance();
     lastOfflineSync = millis();
   }
 
-  // ── Handle incoming state command ───────────────────────────
   if (newStateReceived) {
     newStateReceived = false;
     String s(mqttStateBuf);
@@ -392,14 +329,15 @@ void loop() {
     if (s == "ENROLL") {
       currentState = ENROLL;
     } else {
-      currentState = VERIFY;
-      bottomMsg    = "Place finger...";
+      currentState   = VERIFY;
+      welcomeShownAt = 0;
+      bottomMsg      = "Place finger...";
       oledShowState();
     }
   }
 
-  // ── ENROLL state ────────────────────────────────────────────
   if (currentState == ENROLL) {
+    welcomeShownAt = 0;
     oledBottom("Enrollment Started...", true);
     Serial.println("[Enroll] Waiting for fp/enrollData...");
 
@@ -433,7 +371,6 @@ void loop() {
     oledShowState();
   }
 
-  // ── VERIFY state ────────────────────────────────────────────
   if (currentState == VERIFY) {
     verifyFingerNonBlocking();
   }
@@ -441,9 +378,9 @@ void loop() {
   delay(10);
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  MQTT CALLBACK
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
   char buf[MQTT_BUF_SIZE];
   unsigned int len = min(length, (unsigned int)(MQTT_BUF_SIZE - 1));
@@ -477,9 +414,9 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   }
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  MQTT publish helper
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 bool mqttPublish(const char *topic, const String &payload, bool retained) {
   if (!mqttClient.connected()) return false;
   bool ok = mqttClient.publish(topic, payload.c_str(), retained);
@@ -487,21 +424,18 @@ bool mqttPublish(const char *topic, const String &payload, bool retained) {
   return ok;
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  OLED — top half
-//  Added NTP sync indicator: "T:Ok" / "T:X"
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void oledTop() {
   display.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
   display.setTextSize(1);
 
-  // Row 0: WiFi | MQTT | Time sync status
   display.setCursor(0, 0);
   display.print(WiFi.status() == WL_CONNECTED ? "WiFi:Ok" : "WiFi:X");
   display.setCursor(85, 0);
   display.print(mqttConnected ? "MQTT:Ok" : "MQTT:X");
 
-  // Row 1: Date & time centred
   struct tm t;
   char buf[22];
   if (isTimeSynced() && getLocalTime(&t)) {
@@ -513,7 +447,6 @@ void oledTop() {
   display.setCursor((SCREEN_WIDTH - tw) / 2, 20);
   display.println(buf);
 
-  // Row 2: Device label
   String label = "FOC - SE";
   display.setTextSize(2);
   display.getTextBounds(label, 0, 40, &tx1, &ty1, &tw, &th);
@@ -526,9 +459,9 @@ void oledTop() {
   display.display();
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  OLED — bottom half
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void oledBottom(const String &msg, bool sendToMQTT) {
   bottomMsg = msg;
   display.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2, SH110X_BLACK);
@@ -581,9 +514,9 @@ void oledProgressBar(uint8_t percent) {
   display.display();
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  ENROLLMENT
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void enrollFinger() {
   if (studentCount >= MAX_STUDENTS) {
     oledBottom("Max students!", true);
@@ -603,7 +536,6 @@ void enrollFinger() {
   uint8_t id = studentCount + 1;
   int p      = -1;
 
-  // ── First finger placement ───────────────────────────────
   oledProgressBar(0);
   oledBottom("Place finger to enroll...", true);
   unsigned long start = millis();
@@ -637,7 +569,6 @@ void enrollFinger() {
   delay(800);
   while (finger.getImage() != FINGERPRINT_NOFINGER) delay(20);
 
-  // ── Second finger placement ──────────────────────────────
   oledProgressBar(0);
   oledBottom("Place again...", true);
   start = millis();
@@ -671,7 +602,6 @@ void enrollFinger() {
     return;
   }
 
-  // ── Save to RAM + EEPROM ─────────────────────────────────
   students[studentCount].id = id;
   memset(students[studentCount].name,   0, STUDENT_NAME_LEN);
   memset(students[studentCount].regNum, 0, STUDENT_REG_LEN);
@@ -680,12 +610,11 @@ void enrollFinger() {
   studentCount++;
   saveStudentsToEEPROM();
 
-  // ── Publish enrolled student ─────────────────────────────
   StaticJsonDocument<256> doc;
-  doc["id"]        = id;
-  doc["name"]      = name;
-  doc["regNum"]    = regNum;
-  doc["enrolledAt"] = getTimestamp();   // include enroll time for audit
+  doc["id"]         = id;
+  doc["name"]       = name;
+  doc["regNum"]     = regNum;
+  doc["enrolledAt"] = getTimestamp();
   String payload;
   serializeJson(doc, payload);
   mqttPublish(TOPIC_ENROLLED, payload);
@@ -695,22 +624,24 @@ void enrollFinger() {
   digitalWrite(GREEN_LED, HIGH); delay(900); digitalWrite(GREEN_LED, LOW);
 }
 
-// ================================================================
-//  VERIFICATION  (non-blocking, polled every 200 ms)
+// ─────────────────────────────────────────────────────────────
+//  VERIFICATION  (non-blocking, polled every 300ms)
 //
-//  Key change: if time is NOT synced, attendance goes to the offline
-//  buffer with a placeholder timestamp. The record is only synced
-//  to Firebase after NTP confirms time is valid — preventing bad
-//  timestamps from reaching your database.
-// ================================================================
+//  Welcome hold:
+//    welcomeShownAt > 0  →  hold active, skip all sensor polling
+//    loop() clears it after 2000ms and reverts display
+// ─────────────────────────────────────────────────────────────
 void verifyFingerNonBlocking() {
   static unsigned long lastCheck = 0;
-  if (millis() - lastCheck < 200) return;
+
+  // Block all sensor polling while welcome message is showing
+  if (welcomeShownAt > 0) return;
+
+  if (millis() - lastCheck < 300) return;
   lastCheck = millis();
 
   int p = finger.getImage();
   if (p == FINGERPRINT_NOFINGER) {
-    // Show time-sync warning if clock isn't ready
     if (!isTimeSynced()) {
       oledBottom("No time sync!");
     } else {
@@ -718,10 +649,8 @@ void verifyFingerNonBlocking() {
     }
     return;
   }
-  if (p != FINGERPRINT_OK)       { oledBottom("Image error!");     return; }
-  if (finger.image2Tz(1) != FINGERPRINT_OK) {
-    oledBottom("Image conv fail"); return;
-  }
+  if (p != FINGERPRINT_OK)                  { oledBottom("Image error!");    return; }
+  if (finger.image2Tz(1) != FINGERPRINT_OK) { oledBottom("Image conv fail"); return; }
 
   if (finger.fingerFastSearch() == FINGERPRINT_OK) {
     uint8_t id     = finger.fingerID;
@@ -736,40 +665,36 @@ void verifyFingerNonBlocking() {
       }
     }
 
-    // ── Capture timestamp at the moment of scan ──────────
-    //    This is the most important moment — clock must be read NOW.
-    String timestamp = getTimestamp();
+    String timestamp  = getTimestamp();
     bool   timeSyncOk = (timestamp.length() > 0);
 
-    if (!timeSyncOk) {
-      // Time not ready — show warning and store offline with epoch 0
-      // The bridge will reject epoch-0 timestamps; record is kept
-      // locally until a valid time is available.
-      Serial.println("[Verify] Time not synced — storing offline with placeholder");
-      oledBottom("No time sync!\nStored offline.");
-    } else {
+    if (timeSyncOk) {
+      // Show welcome and start the 2-second hold
       oledBottom("Welcome:\n-> " + name);
+      welcomeShownAt = millis();
+    } else {
+      Serial.println("[Verify] Time not synced — storing offline");
+      oledBottom("No time sync!\nStored offline.");
+      // No hold for warning messages
     }
 
     digitalWrite(GREEN_LED, HIGH); delay(180); digitalWrite(GREEN_LED, LOW);
     Serial.printf("[Verify] id=%d name=%s ts=%s synced=%d\n",
                   id, name.c_str(), timestamp.c_str(), (int)timeSyncOk);
 
-    // Build attendance record
     Attendance rec;
     rec.id = id;
     memset(rec.name,      0, STUDENT_NAME_LEN);
     memset(rec.regNum,    0, STUDENT_REG_LEN);
     memset(rec.timestamp, 0, TS_LEN);
-    name.toCharArray(rec.name,           STUDENT_NAME_LEN);
-    regNum.toCharArray(rec.regNum,       STUDENT_REG_LEN);
+    name.toCharArray(rec.name,     STUDENT_NAME_LEN);
+    regNum.toCharArray(rec.regNum, STUDENT_REG_LEN);
     if (timeSyncOk) {
       timestamp.toCharArray(rec.timestamp, TS_LEN);
     } else {
       strncpy(rec.timestamp, "1970-01-01T00:00:00+05:30", TS_LEN - 1);
     }
 
-    // Build JSON payload — include ntpSynced flag so bridge can validate
     StaticJsonDocument<300> doc;
     doc["id"]        = id;
     doc["name"]      = name;
@@ -779,25 +704,22 @@ void verifyFingerNonBlocking() {
     String payload;
     serializeJson(doc, payload);
 
-    // ── Publish or store offline ──────────────────────────
-    //    Even if MQTT is connected, don't send records with bad timestamps.
-    //    They'll be stored offline and synced after NTP recovers.
     bool shouldPublish = mqttConnected && timeSyncOk;
 
     if (shouldPublish && mqttPublish(TOPIC_ATTENDANCE, payload)) {
-      // Published OK
+      // Published OK — welcome holds for 2s, loop() reverts display
     } else {
       if (offlineCount < MAX_OFFLINE_ATTENDANCE) {
         offlineAttendance[offlineCount] = rec;
         offlineCount++;
         saveOfflineAttendanceToEEPROM();
-        if (!timeSyncOk) {
-          oledBottom("No time — stored!");
-        } else {
+        if (timeSyncOk) {
+          welcomeShownAt = 0;   // cancel hold, show offline notice instead
           oledBottom(mqttConnected ? "Saved offline!" : "Offline stored!");
         }
         Serial.println("[Verify] Stored offline");
       } else {
+        welcomeShownAt = 0;
         oledBottom("Offline full!");
         Serial.println("[Verify] Offline buffer full");
       }
@@ -808,9 +730,9 @@ void verifyFingerNonBlocking() {
   }
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  WiFi reconnect
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void reconnectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
   Serial.println("[WiFi] Reconnecting...");
@@ -821,7 +743,6 @@ void reconnectWiFi() {
     delay(200);
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("[WiFi] Connected: " + WiFi.localIP().toString());
-    // Trigger NTP resync now that we have connectivity again
     triggerNTPResync();
     lastNTPResync = millis();
   } else {
@@ -829,9 +750,9 @@ void reconnectWiFi() {
   }
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  MQTT reconnect
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void reconnectMQTT() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (mqttClient.connected()) { mqttConnected = true; return; }
@@ -853,12 +774,9 @@ void reconnectMQTT() {
   }
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  Offline sync
-//  Only syncs records that have a valid (non-epoch-0) timestamp.
-//  Records with placeholder timestamps are left in the buffer
-//  until NTP confirms time is good.
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 void syncOfflineAttendance() {
   if (offlineCount == 0) return;
   if (!isTimeSynced()) {
@@ -871,7 +789,6 @@ void syncOfflineAttendance() {
 
   int i = 0;
   while (i < offlineCount) {
-    // Skip placeholder records — they have an epoch-0 timestamp
     if (strncmp(offlineAttendance[i].timestamp, "1970", 4) == 0) {
       Serial.printf("[Sync] Skipping record %d — bad timestamp\n", i);
       i++;
@@ -891,7 +808,7 @@ void syncOfflineAttendance() {
     serializeJson(doc, payload);
 
     if (mqttPublish(TOPIC_ATTENDANCE, payload)) {
-      removeOfflineRecordAt(i);   // shifts left; do NOT increment i
+      removeOfflineRecordAt(i);
     } else {
       Serial.printf("[Sync] Failed at record %d — retry later\n", i);
       oledBottom("Sync failed! Retry later...");
@@ -912,9 +829,9 @@ void removeOfflineRecordAt(uint8_t idx) {
   saveOfflineAttendanceToEEPROM();
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  EEPROM helpers
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 bool safeEEPROMWrite(int addr, const uint8_t *buf, size_t len) {
   if (addr < 0 || (addr + (int)len) > EEPROM_SIZE) return false;
   for (size_t i = 0; i < len; i++) EEPROM.write(addr + i, buf[i]);
@@ -978,9 +895,9 @@ void loadOfflineAttendanceFromEEPROM() {
   Serial.printf("[EEPROM] Loaded %d offline records\n", offlineCount);
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 //  Utility
-// ================================================================
+// ─────────────────────────────────────────────────────────────
 String sanitizeKey(const String &s) {
   String out = s;
   out.replace('.', '-'); out.replace('#', '-');
